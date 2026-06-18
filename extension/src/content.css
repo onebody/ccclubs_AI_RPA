@@ -1,0 +1,19 @@
+.ai-browser-overlay {
+  position: fixed;
+  border: 2px solid #00ff00;
+  background-color: rgba(0, 255, 0, 0.2);
+  z-index: 999999;
+  pointer-events: none;
+  animation: ai-browser-pulse 2s infinite;
+}
+
+@keyframes ai-browser-pulse {
+  0%, 100% {
+    border-color: #00ff00;
+    box-shadow: 0 0 0 0 rgba(0, 255, 0, 0.4);
+  }
+  50% {
+    border-color: #00ff88;
+    box-shadow: 0 0 0 5px rgba(0, 255, 0, 0);
+  }
+}

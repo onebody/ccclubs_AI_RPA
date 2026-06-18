@@ -1,0 +1,108 @@
+# ============================================================
+# AI Browser SaaS Platform - Custom Chromium Dockerfile
+# 基于 Ubuntu 22.04 的定制化 Chromium 浏览器镜像
+# ============================================================
+
+# 使用 Ubuntu 22.04 作为基础镜像
+FROM ubuntu:22.04
+
+# 设置环境变量，避免交互式安装提示
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=UTC
+
+# ============================================================
+# 安装系统依赖和 Chromium 浏览器
+# ============================================================
+RUN apt-get update && apt-get install -y \
+    # 基础工具
+    wget \
+    curl \
+    gnupg \
+    ca-certificates \
+    # Chromium 依赖库
+    chromium-browser \
+    chromium-chromedriver \
+    # 字体和语言支持
+    fonts-liberation \
+    fonts-noto \
+    fonts-noto-cjk \
+    # 必要的运行时库
+    libnss3 \
+    libnspr4 \
+    libatk1.0-0 \
+    libatk-bridge2.0-0 \
+    libcups2 \
+    libdrm2 \
+    libdbus-1-3 \
+    libxcb1 \
+    libxkbcommon0 \
+    libx11-6 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxrandr2 \
+    libgbm1 \
+    libpango-1.0-0 \
+    libcairo2 \
+    libasound2 \
+    libxshmfence1 \
+    # 清理缓存以减小镜像体积
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# ============================================================
+# 禁用 Chromium 自动更新
+# ============================================================
+
+# 创建 Chromium 配置目录
+RUN mkdir -p /etc/chromium-browser/policies/managed
+
+# 通过策略禁用自动更新和设置默认配置
+RUN echo '{"BrowserSignin": 0, "AutoUpdateCheckInitiallyDelay": 0, "UpdateCheckInterval": 0}' > /etc/chromium-browser/policies/managed/disable-updates.json
+
+# 设置 Chromium 标志以禁用更新和后台服务
+ENV CHROMIUM_FLAGS="--disable-background-networking --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-breakpad --disable-client-side-phishing-detection --disable-component-extensions-with-background-pages --disable-default-apps --disable-extensions --disable-features=TranslateUI --disable-hang-monitor --disable-ipc-flooding-protection --disable-popup-blocking --disable-prompt-on-repost --disable-renderer-backgrounding --disable-sync --force-color-profile=srgb --metrics-recording-only --no-first-run --enable-automation --password-store=basic --use-mock-keychain --disable-background-mode --disable-updater"
+
+# ============================================================
+# 创建非 root 用户运行环境
+# ============================================================
+
+# 创建 chromium 用户和组
+RUN groupadd -r chromium && useradd -r -g chromium -d /home/chromium -s /bin/bash chromium \
+    && mkdir -p /home/chromium/.config/chromium \
+    && chown -R chromium:chromium /home/chromium
+
+# 设置工作目录
+WORKDIR /home/chromium
+
+# 切换到非 root 用户
+USER chromium
+
+# ============================================================
+# CDP (Chrome DevTools Protocol) 配置
+# ============================================================
+
+# 暴露 CDP 端口 9222
+EXPOSE 9222
+
+# 设置默认启动命令
+# --headless=new: 新版无头模式
+# --no-sandbox: 在容器环境中需要（已配合非root用户使用）
+# --disable-gpu: 无GPU环境禁用硬件加速
+# --remote-debugging-port: 启用 CDP 远程调试
+# --remote-debugging-address: 允许外部连接
+CMD ["chromium-browser", \
+     "--headless=new", \
+     "--no-sandbox", \
+     "--disable-gpu", \
+     "--disable-dev-shm-usage", \
+     "--disable-software-rasterizer", \
+     "--remote-debugging-port=9222", \
+     "--remote-debugging-address=0.0.0.0", \
+     "--user-data-dir=/home/chromium/.config/chromium"]
+
+# ============================================================
+# 镜像元数据
+# ============================================================
+LABEL maintainer="AI Browser SaaS Platform Team" \
+      description="Custom Chromium browser with CDP support for AI Browser SaaS Platform" \
+      version="1.0.0"

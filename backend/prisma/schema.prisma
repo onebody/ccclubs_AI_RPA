@@ -1,0 +1,83 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Tenant {
+  tenantId    String    @id @default(uuid())
+  name        String    @db.VarChar(128)
+  quota       Int       @default(10)
+  aesKey      String    @db.VarChar(256)
+  enabled     Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  
+  sessions    BrowserSession[]
+  auditLogs   AuditLog[]
+  scripts     ScriptTemplate[]
+  
+  @@map("tenant")
+}
+
+model BrowserSession {
+  sessionId    String    @id @default(uuid())
+  tenantId     String
+  proxyId      String?   @db.VarChar(64)
+  status       String    @db.VarChar(32)
+  startTime    DateTime?
+  destroyTime  DateTime?
+  memoryLimit  String    @db.VarChar(16) @default("2Gi")
+  cpuLimit     String    @db.VarChar(16) @default("1")
+  createdAt    DateTime  @default(now())
+  
+  tenant       Tenant    @relation(fields: [tenantId], references: [tenantId], onDelete: Cascade)
+  tasks        TaskRecord[]
+  auditLogs    AuditLog[]
+  
+  @@map("browser_session")
+}
+
+model TaskRecord {
+  taskId       String    @id @default(uuid())
+  sessionId    String
+  taskType     String    @db.VarChar(32)
+  status       String    @db.VarChar(32)
+  duration     Int?
+  resultPath   String?   @db.VarChar(256)
+  createdAt    DateTime  @default(now())
+  
+  session      BrowserSession  @relation(fields: [sessionId], references: [sessionId], onDelete: Cascade)
+  
+  @@map("task_record")
+}
+
+model AuditLog {
+  logId        Int       @id @default(autoincrement())
+  operatorId   String    @db.VarChar(36)
+  tenantId     String
+  sessionId    String?   @db.VarChar(36)
+  actionType   String    @db.VarChar(64)
+  actionTime   DateTime  @default(now())
+  details      Json?
+  
+  tenant       Tenant    @relation(fields: [tenantId], references: [tenantId], onDelete: Cascade)
+  session      BrowserSession?  @relation(fields: [sessionId], references: [sessionId], onDelete: Cascade)
+  
+  @@map("audit_log")
+}
+
+model ScriptTemplate {
+  templateId   String    @id @default(uuid())
+  tenantId     String
+  name         String    @db.VarChar(128)
+  dslContent   String    @db.Text
+  createdAt    DateTime  @default(now())
+  
+  tenant       Tenant    @relation(fields: [tenantId], references: [tenantId], onDelete: Cascade)
+  
+  @@map("script_template")
+}

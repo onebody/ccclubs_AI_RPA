@@ -1,0 +1,68 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-browser-backend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: ai-browser-backend
+  template:
+    metadata:
+      labels:
+        app: ai-browser-backend
+      annotations:
+        prometheus.io/scrape: 'true'
+        prometheus.io/port: '3000'
+    spec:
+      containers:
+        - name: backend
+          image: ai-browser-backend:latest
+          ports:
+            - containerPort: 3000
+          env:
+            - name: DATABASE_URL
+              value: 'postgresql://$(DB_USER):$(DB_PASSWORD)@postgres:5432/ai_browser'
+            - name: REDIS_URL
+              value: 'redis://redis:6379'
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: app-secret
+                  key: jwt_secret
+            - name: PORT
+              value: '3000'
+          envFrom:
+            - secretRef:
+                name: db-secret
+          resources:
+            requests:
+              cpu: '500m'
+              memory: '1Gi'
+            limits:
+              cpu: '2'
+              memory: '4Gi'
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ai-browser-backend
+spec:
+  selector:
+    app: ai-browser-backend
+  ports:
+    - port: 3000
+      targetPort: 3000
+  type: ClusterIP
