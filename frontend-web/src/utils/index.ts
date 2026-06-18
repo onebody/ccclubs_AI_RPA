@@ -7,7 +7,7 @@ export const debounce = <T extends (...args: any[]) => any>(
   fn: T,
   delay: number
 ): ((...args: Parameters<T>) => void) => {
-  let timer: NodeJS.Timeout
+  let timer: any
   
   return (...args: Parameters<T>) => {
     clearTimeout(timer)
