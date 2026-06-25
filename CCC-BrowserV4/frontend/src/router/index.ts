@@ -20,11 +20,20 @@ const routes: RouteRecordRaw[] = [
       },
       // 后续功能页面在此追加
       {
-        path: 'sites',
-        name: 'Sites',
-        component: () => import('@/pages/SitePage.vue'),
+        path: 'tasks',
+        name: 'Tasks',
+        component: () => import('@/pages/TaskPage.vue'),
       },
-      // { path: 'tasks', name: 'Tasks', component: () => import('@/pages/TaskPage.vue') },
+      {
+        path: 'tasks/add',
+        name: 'TaskAdd',
+        component: () => import('@/pages/TaskEditPage.vue'),
+      },
+      {
+        path: 'tasks/edit/:id',
+        name: 'TaskEdit',
+        component: () => import('@/pages/TaskEditPage.vue'),
+      },
       // { path: 'settings', name: 'Settings', component: () => import('@/pages/SettingsPage.vue') },
     ],
   },

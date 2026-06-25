@@ -20,13 +20,22 @@ export interface MenuItem {
   title: string
 }
 
-// 站点信息类型
-export interface SiteInfo {
+// 任务信息类型
+export interface TaskInfo {
   id: number
   name: string
-  url: string
-  type: '政务网站' | '企业查询' | '司法查询' | '信用服务' | '其他'
-  remark: string
-  enabled: boolean
+  status: 'pending' | 'running' | 'completed' | 'failed'
+  predecessorId: number | null
+  predecessorName: string | null
+  customerName: string | null
+  handlerAccount: string | null
+  subTasks: string[] | null
+  province: string | null
+  lastExecutedAt: string | null
+  nextExecutedAt: string | null
+  lastResult: string | null
+  remark: string | null
+  deleted: boolean
   createdAt: string
+  updatedAt: string
 }

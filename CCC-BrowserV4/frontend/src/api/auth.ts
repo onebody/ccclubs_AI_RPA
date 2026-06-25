@@ -1,5 +1,21 @@
 import { tauriBridge } from '@/utils/tauri-bridge'
 import { listen } from '@tauri-apps/api/event'
+import request from './request'
+
+// 后端 API 登录
+export async function loginApi(data: { client_id: string; token: string; device_id: string; username?: string }) {
+  return request.post('/auth/login', data)
+}
+
+// 后端 API 登出
+export async function logoutApi(userId: string) {
+  return request.post('/auth/logout', { userId })
+}
+
+// 后端 API 验证
+export async function verifyAuth(userId: string) {
+  return request.get('/auth/verify', { params: { userId } })
+}
 
 /**
  * 执行登录流程

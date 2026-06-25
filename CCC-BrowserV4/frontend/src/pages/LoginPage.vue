@@ -62,7 +62,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
 import { useDeviceStore } from '@/stores/device'
-import { performLogin } from '@/api/auth'
+import { performLogin, loginApi } from '@/api/auth'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -91,25 +91,36 @@ onUnmounted(() => {
 })
 
 const handleLogin = async () => {
-  // 开发模式：直接虚拟登录
+  // 开发模式：调用后端 API 虚拟登录
   if (isDevMode) {
     try {
       isLoggingIn.value = true
       loginError.value = ''
       
-      // 模拟短暂延迟
-      await new Promise(resolve => setTimeout(resolve, 500))
+      // 获取设备信息
+      const deviceId = deviceStore.deviceId || 'dev-device-001'
+      const clientId = `dev-client-${Date.now()}`
+      const token = `dev-token-${Math.random().toString(36).slice(2)}`
       
-      // 虚拟登录
-      authStore.setLoggedIn('dev-user-001', '开发者')
-      ElMessage.success('开发模式：已使用虚拟账号登录')
+      // 调用后端登录 API
+      const res = await loginApi({
+        client_id: clientId,
+        token: token,
+        device_id: deviceId,
+        username: '开发者',
+      }) as any
+      
+      authStore.setLoggedIn(res.userId, res.username, res.token)
+      ElMessage.success(`欢迎，${res.username}`)
       router.push('/')
-      
-      isLoggingIn.value = false
     } catch (error) {
-      console.error('开发模式登录错误:', error)
-      loginError.value = '登录流程出错，请重试'
-      ElMessage.error('登录流程出错')
+      console.error('开发模式登录失败:', error)
+      // 如果后端不可用，回退到本地虚拟登录
+      await new Promise(resolve => setTimeout(resolve, 500))
+      authStore.setLoggedIn('dev-user-001', '开发者')
+      ElMessage.success('开发模式：后端不可用，已使用本地虚拟账号登录')
+      router.push('/')
+    } finally {
       isLoggingIn.value = false
     }
     return

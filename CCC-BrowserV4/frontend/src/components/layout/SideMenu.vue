@@ -35,9 +35,8 @@ const router = useRouter()
 const menuItems: MenuItem[] = [
   { index: '/login', icon: 'User', title: '用户登录' },
   { index: '/', icon: 'HomeFilled', title: '首页' },
-  { index: '/sites', icon: 'Monitor', title: '站点管理' },
+  { index: '/tasks', icon: 'Timer', title: '站点任务' },
   // 后续追加功能菜单
-  // { index: '/tasks', icon: 'List', title: '任务列表' },
   // { index: '/settings', icon: 'Setting', title: '设置' },
 ]
 
