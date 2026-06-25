@@ -1,0 +1,20 @@
+[package]
+name = "rpa-browser"
+version = "1.0.0"
+description = "极简配置驱动RPA自动化系统"
+authors = ["RPA Team"]
+license = "MIT"
+edition = "2021"
+rust-version = "1.75"
+
+[build-dependencies]
+tauri-build = { version = "2.0.0-beta.28", features = [] }
+
+[dependencies]
+tauri = { version = "2.0.0-beta.28", features = ["system-tray", "window-close-requested"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]

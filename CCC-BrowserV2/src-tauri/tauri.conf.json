@@ -1,0 +1,106 @@
+{
+  "$schema": "https://tauri.app/schema.json",
+  "productName": "RPA-Browser",
+  "version": "1.0.0",
+  "identifier": "com.rpa.browser",
+  "description": "极简配置驱动RPA自动化系统",
+  "build": {
+    "beforeBuildCommand": "cd ../web-admin && npm run build",
+    "beforeDevCommand": "cd ../web-admin && npm run dev",
+    "devUrl": "http://localhost:5173",
+    "distDir": "../web-admin/dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "RPA自动化系统",
+        "width": 1400,
+        "height": 900,
+        "minWidth": 1200,
+        "minHeight": 700,
+        "resizable": true,
+        "fullscreen": false,
+        "decorations": true,
+        "transparent": false,
+        "alwaysOnTop": false,
+        "visible": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self' 'unsafe-inline' 'unsafe-eval'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: http: https:; connect-src 'self' http://127.0.0.1:3000 http://localhost:3000 ws://127.0.0.1:3000 ws://localhost:3000;"
+    },
+    "bundle": {
+      "active": true,
+      "targets": "all",
+      "identifier": "com.rpa.browser",
+      "icon": [
+        "icons/32x32.png",
+        "icons/128x128.png",
+        "icons/128x128@2x.png",
+        "icons/icon.icns",
+        "icons/icon.ico"
+      ]
+    },
+    "updater": {
+      "active": false
+    },
+    "systemTray": {
+      "iconPath": "icons/icon.png",
+      "iconAsTemplate": true
+    }
+  },
+  "tauri": {
+    "allowlist": {
+      "all": false,
+      "shell": {
+        "all": false,
+        "open": false,
+        "execute": false
+      },
+      "dialog": {
+        "all": false
+      },
+      "fs": {
+        "all": false
+      },
+      "path": {
+        "all": false
+      },
+      "window": {
+        "all": true
+      },
+      "app": {
+        "all": false
+      },
+      "menu": {
+        "all": false
+      },
+      "clipboard": {
+        "all": false
+      },
+      "notification": {
+        "all": false
+      }
+    },
+    "bundle": {
+      "windows": {
+        "certificateThumbprint": null,
+        "digestAlgorithm": "sha256",
+        "timestampUrl": "",
+        "wix": {
+          "language": "en-US"
+        }
+      },
+      "macOS": {
+        "frameworks": [],
+        "minimumSystemVersion": "",
+        "exceptionDomain": "",
+        "signingIdentity": null,
+        "entitlements": null
+      },
+      "linux": {
+        "targets": ["deb", "appimage"]
+      }
+    }
+  }
+}
