@@ -54,6 +54,15 @@ packages/*/node_modules/
 # Large bundled apps
 *.app/
 
+# Rust build output
+target/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+
 # Database
 *.sqlite
 *.db
