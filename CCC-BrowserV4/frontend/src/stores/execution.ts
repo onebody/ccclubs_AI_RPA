@@ -1,4 +1,4 @@
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
 import type { ExecutionStep, CompanyInfo } from '../types/execution'
 import * as executionApi from '../api/execution'
@@ -11,13 +11,16 @@ export const useExecutionStore = defineStore('execution', () => {
   const companies = ref<CompanyInfo[]>([])
   const selectedCompany = ref<CompanyInfo | null>(null)
 
-  const isVisible = ref(false)  // 控制面板弹窗显示/隐藏
+  const activeTaskId = ref<number | null>(null)  // 当前正在执行的任务ID，null表示无执行中任务
   const isDemo = ref(false)     // 是否为演示模式
+
+  // 判断某任务是否正在执行
+  const isExecuting = computed(() => {
+    return (taskId: number) => activeTaskId.value === taskId
+  })
 
   // 处理 WebSocket 消息
   function handleWsMessage(msg: { type: string; data: any }) {
-    // 演示模式下忽略 WS 消息
-    if (isDemo.value) return
     // 只处理与当前 taskId 相关的消息
     if (msg.data?.taskId && taskId.value && msg.data.taskId !== taskId.value) return
 
@@ -124,7 +127,7 @@ export const useExecutionStore = defineStore('execution', () => {
     qrImage.value = null
     companies.value = []
     selectedCompany.value = null
-    isVisible.value = true
+    activeTaskId.value = id
     isDemo.value = false
   }
 
@@ -137,7 +140,7 @@ export const useExecutionStore = defineStore('execution', () => {
     qrImage.value = null
     companies.value = []
     selectedCompany.value = null
-    isVisible.value = true
+    activeTaskId.value = id
     await delay(1500)
 
     step.value = 'qr_scanning'
@@ -164,13 +167,16 @@ export const useExecutionStore = defineStore('execution', () => {
   async function simulateExecution() {
     isDemo.value = true
     await delay(1500)
-    message.value = '正在执行: 合同备案...'
+    step.value = 'keeping_alive'
+    message.value = '页面保活中，等待业务触发...'
+    await delay(3000)
+    message.value = '检测到待处理业务：备案查询'
     await delay(2000)
-    message.value = '正在执行: 违章查询...'
+    step.value = 'executing'
+    message.value = '正在执行: 备案查询...'
     await delay(2000)
-
-    step.value = 'completed'
-    message.value = '任务执行完成'
+    step.value = 'keeping_alive'
+    message.value = '业务处理完成，继续保活...'
   }
 
   function generateMockQRCode(): string {
@@ -197,15 +203,16 @@ export const useExecutionStore = defineStore('execution', () => {
     return new Promise(resolve => setTimeout(resolve, ms))
   }
 
-  // 关闭面板
-  function close() {
-    isVisible.value = false
+  // 清除执行状态
+  function clearExecution() {
+    activeTaskId.value = null
     reset()
   }
 
   // 重置状态
   function reset() {
     taskId.value = null
+    activeTaskId.value = null
     step.value = 'idle'
     message.value = ''
     qrImage.value = null
@@ -215,7 +222,7 @@ export const useExecutionStore = defineStore('execution', () => {
   }
 
   return {
-    taskId, step, message, qrImage, companies, selectedCompany, isVisible, isDemo,
-    handleWsMessage, doScanComplete, doSelectCompany, doCancel, startExecution, startDemo, close, reset,
+    taskId, step, message, qrImage, companies, selectedCompany, activeTaskId, isExecuting, isDemo,
+    handleWsMessage, doScanComplete, doSelectCompany, doCancel, startExecution, startDemo, clearExecution, reset,
   }
 })

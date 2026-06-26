@@ -31,7 +31,14 @@ export const useTaskStore = defineStore('task', () => {
     }
   }
 
-  async function addTask(data: { name: string; sub_tasks?: string[] | null; province?: string | null; remark?: string }) {
+  async function addTask(data: {
+    name: string
+    tenant_id?: string | null
+    device_id?: string | null
+    sub_tasks?: string[] | null
+    province?: string | null
+    remark?: string
+  }) {
     return await createTask(data) as any
   }
 

@@ -17,6 +17,44 @@
           <el-input v-model="form.name" placeholder="请输入任务名称" />
         </el-form-item>
 
+        <!-- 所属公司/租户 -->
+        <el-form-item label="所属公司" prop="tenant_id">
+          <el-select
+            v-model="form.tenant_id"
+            placeholder="请选择所属公司（选填）"
+            style="width: 100%"
+            filterable
+            clearable
+            :value-on-clear="null"
+          >
+            <el-option
+              v-for="company in companyList"
+              :key="company.id"
+              :label="company.name"
+              :value="company.id"
+            />
+          </el-select>
+        </el-form-item>
+
+        <!-- 执行设备 -->
+        <el-form-item label="执行设备" prop="device_id">
+          <el-select
+            v-model="form.device_id"
+            placeholder="请选择执行设备（选填）"
+            style="width: 100%"
+            filterable
+            clearable
+            :value-on-clear="null"
+          >
+            <el-option
+              v-for="device in deviceList"
+              :key="device.id"
+              :label="device.name"
+              :value="device.id"
+            />
+          </el-select>
+        </el-form-item>
+
         <!-- 所属客户 -->
         <el-form-item label="所属客户" prop="customer_name">
           <el-input v-model="form.customer_name" placeholder="请输入所属客户（选填）" />
@@ -93,6 +131,8 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 import { useTaskStore } from '@/stores/task'
+import * as deviceApi from '@/api/device'
+import type { TenantInfo, DeviceInfo } from '@/api/device'
 
 const route = useRoute()
 const router = useRouter()
@@ -101,6 +141,11 @@ const taskStore = useTaskStore()
 // 表单 ref
 const formRef = ref<FormInstance>()
 const saving = ref(false)
+
+// 租户/公司列表
+const companyList = ref<TenantInfo[]>([])
+// 设备列表
+const deviceList = ref<DeviceInfo[]>([])
 
 // 省份列表
 const provinceList = [
@@ -113,6 +158,8 @@ const provinceList = [
 /** 表单数据 */
 const form = ref({
   name: '',
+  tenant_id: null as string | null,
+  device_id: null as string | null,
   customer_name: '',
   handler_account: '',
   sub_tasks: [] as string[],
@@ -130,13 +177,35 @@ const rules: FormRules = {
 const isEdit = computed(() => !!route.params.id)
 const editId = computed(() => Number(route.params.id))
 
+/** 加载租户和设备列表 */
+async function loadCompanyList() {
+  try {
+    companyList.value = await deviceApi.getTenantList()
+  } catch {
+    console.error('加载租户列表失败')
+  }
+}
+
+async function loadDeviceList() {
+  try {
+    deviceList.value = await deviceApi.getDeviceList()
+  } catch {
+    console.error('加载设备列表失败')
+  }
+}
+
 /** 初始化 */
 onMounted(async () => {
+  // 并行加载租户和设备列表
+  await Promise.all([loadCompanyList(), loadDeviceList()])
+
   if (isEdit.value) {
     const task = await taskStore.getTaskById(editId.value)
     if (task) {
       form.value = {
         name: task.name,
+        tenant_id: task.tenantId ?? null,
+        device_id: task.deviceId ?? null,
         customer_name: task.customerName ?? '',
         handler_account: task.handlerAccount ?? '',
         sub_tasks: task.subTasks ? [...task.subTasks] : [],
@@ -161,6 +230,8 @@ const handleSave = async () => {
   try {
     const payload: any = {
       name: form.value.name,
+      tenant_id: form.value.tenant_id,
+      device_id: form.value.device_id,
       customer_name: form.value.customer_name,
       handler_account: form.value.handler_account || null,
       sub_tasks: form.value.sub_tasks.length > 0 ? form.value.sub_tasks : null,

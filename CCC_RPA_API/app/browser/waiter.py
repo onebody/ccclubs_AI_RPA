@@ -53,6 +53,29 @@ class ExecutionWaiter:
             event.set()
 
     @classmethod
+    def check_signal(cls, task_id: int):
+        """非阻塞检查是否有取消信号，不消费信号（用于保活循环等场景）"""
+        with cls._lock:
+            # 先检查 data 中是否已有取消标记
+            data = cls._data.get(task_id)
+            if data and data.get("cancelled"):
+                return data
+
+            # 检查 event
+            event = cls._events.get(task_id)
+            if event and event.is_set():
+                return cls._data.get(task_id)
+
+        return None
+
+    @classmethod
+    def register_check(cls, task_id: int):
+        """为保活循环等阶段注册可检查的事件"""
+        with cls._lock:
+            if task_id not in cls._events:
+                cls._events[task_id] = threading.Event()
+
+    @classmethod
     def cleanup(cls, task_id: int):
         """清理资源"""
         with cls._lock:

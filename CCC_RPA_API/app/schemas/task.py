@@ -4,6 +4,8 @@ from typing import Optional, List
 
 class TaskCreate(BaseModel):
     name: str
+    tenant_id: Optional[str] = None
+    device_id: Optional[str] = None
     customer_name: Optional[str] = None
     handler_account: Optional[str] = None
     sub_tasks: Optional[List[str]] = None
@@ -14,6 +16,8 @@ class TaskCreate(BaseModel):
 class TaskUpdate(BaseModel):
     name: Optional[str] = None
     status: Optional[str] = None
+    tenant_id: Optional[str] = None
+    device_id: Optional[str] = None
     customer_name: Optional[str] = None
     handler_account: Optional[str] = None
     sub_tasks: Optional[List[str]] = None
@@ -28,6 +32,8 @@ class TaskResponse(BaseModel):
     id: int
     name: str
     status: str
+    tenantId: Optional[str] = None
+    deviceId: Optional[str] = None
     customerName: Optional[str] = None
     handlerAccount: Optional[str] = None
     subTasks: Optional[List[str]] = None

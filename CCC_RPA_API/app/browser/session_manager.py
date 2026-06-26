@@ -1,7 +1,10 @@
 import os
 import threading
 import queue
+import logging
 from playwright.sync_api import sync_playwright, Browser, BrowserContext, Playwright
+
+logger = logging.getLogger(__name__)
 
 
 class BrowserSessionManager:
@@ -97,7 +100,13 @@ class BrowserSessionManager:
         """获取或创建指定省份的浏览器上下文"""
         def _get():
             if province in cls._contexts:
-                return cls._contexts[province]
+                ctx = cls._contexts[province]
+                try:
+                    _ = ctx.pages  # 验证 context 是否仍然存活
+                    return ctx
+                except Exception:
+                    logger.warning(f"省份 {province} 的 BrowserContext 已失效，重新创建")
+                    del cls._contexts[province]
             state_file = os.path.join(cls._storage_dir, f"{province}_state.json")
             storage_state = state_file if os.path.exists(state_file) else None
             context = cls._browser.new_context(
@@ -133,6 +142,32 @@ class BrowserSessionManager:
                 cls._contexts[province].close()
                 del cls._contexts[province]
         cls.run(_close)
+
+    @classmethod
+    def check_alive(cls) -> bool:
+        """检查浏览器是否仍然存活"""
+        try:
+            if cls._browser is None:
+                return False
+            return cls._browser.is_connected()
+        except Exception:
+            return False
+
+    @classmethod
+    def recover(cls, province: str):
+        """恢复浏览器会话：关闭旧会话并重新创建"""
+        logger.warning("正在恢复浏览器会话...")
+        for prov in list(cls._contexts.keys()):
+            try:
+                cls._contexts[prov].close()
+            except Exception:
+                pass
+        cls._contexts.clear()
+        cls._browser = None
+        cls._playwright = None
+        cls._ensure_initialized()
+        cls.get_context(province)
+        logger.info("浏览器会话恢复完成")
 
     @classmethod
     def close_all(cls):

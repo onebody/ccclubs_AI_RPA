@@ -25,6 +25,8 @@ def _task_to_response(db: Session, task: Task) -> TaskResponse:
         id=task.id,
         name=task.name,
         status=task.status,
+        tenantId=task.tenant_id,
+        deviceId=task.device_id,
         customerName=task.customer_name,
         handlerAccount=task.handler_account,
         subTasks=sub_tasks,
@@ -72,6 +74,8 @@ class TaskService:
     def create_task(db: Session, data: TaskCreate) -> TaskResponse:
         task = Task(
             name=data.name,
+            tenant_id=data.tenant_id,
+            device_id=data.device_id,
             customer_name=data.customer_name,
             handler_account=data.handler_account,
             sub_tasks=json.dumps(data.sub_tasks, ensure_ascii=False) if data.sub_tasks else None,

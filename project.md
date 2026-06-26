@@ -1,3 +1,719 @@
+# CCC RPA 自动化平台 — 项目技术文档
+
+> 版本：1.0 | 最后更新：2026-06
+
+---
+
+## 1. 项目概述
+
+CCC RPA 自动化平台是一套专注于**政府交通管理网站**（122.gov.cn）的 RPA 自动化操作系统。平台通过 Playwright 浏览器引擎模拟真人操作，实现从自动登录、扫码认证、选择单位到页面保活与业务自动处理的全流程自动化。
+
+### 1.1 三大子系统
+
+| 子系统 | 路径 | 定位 | 核心技术 |
+|--------|------|------|----------|
+| **CCC_RPA_API** | `CCC_RPA_API/` | 核心后端（自动化执行引擎 + REST API + WebSocket） | Python FastAPI + Playwright |
+| **CCC-BrowserV4/frontend** | `CCC-BrowserV4/frontend/` | 桌面客户端前端 | Vue3 + Pinia + Element Plus + TypeScript |
+| **CCC-BrowserV4/backend** | `CCC-BrowserV4/backend/` | 辅助后端（定位待明确） | Python FastAPI |
+| **CCC-BrowserV4/src-tauri** | `CCC-BrowserV4/src-tauri/` | Tauri 桌面壳层 | Rust + Tauri 2 |
+
+### 1.2 核心能力
+
+```
+自动登录 → 扫码认证 → 选择单位 → 页面保活 → 自动处理业务
+```
+
+- **自动登录**：导航到 122.gov.cn 单位用户登录页，截取二维码推送至前端
+- **扫码认证**：用户使用交管 12123 APP 扫码，前端通知后端继续流程
+- **选择单位**：抓取单位列表推送至前端，用户选择后自动切换单位
+- **页面保活**：在当前业务页面执行轻量级随机操作（滚动、鼠标移动、Tab），维持会话不过期
+- **业务自动处理**：检测待处理业务（备案查询、违章查询等），自动执行子任务
+
+---
+
+## 2. 系统架构
+
+### 2.1 整体数据流
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  Tauri 桌面客户端（CCC-BrowserV4）                                │
+│  ┌──────────────────┐   ┌──────────────────────────────────────┐ │
+│  │  Rust 层          │   │  Vue3 前端                           │ │
+│  │  设备标识/登录回调 │◄─►│  页面/组件/Store/API                 │ │
+│  └──────────────────┘   └────────────┬─────────────────────────┘ │
+└──────────────────────────────────────┼──────────────────────────┘
+                                       │ HTTP REST + WebSocket
+                                       ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  CCC_RPA_API（Python FastAPI 后端，端口 8000）                    │
+│  ┌──────────┐  ┌──────────┐  ┌───────────┐  ┌───────────────┐  │
+│  │ API 路由  │─►│ 服务层    │─►│ 浏览器层   │─►│ Playwright    │  │
+│  │ REST+WS  │  │ Executor │  │ Session   │  │ Chromium 引擎 │  │
+│  └──────────┘  └──────────┘  └───────────┘  └───────────────┘  │
+│                                         │                        │
+│  ┌──────────┐  ┌──────────┐            ▼                        │
+│  │ WebSocket │  │ 数据模型  │     122.gov.cn                     │
+│  │ 广播管理  │  │ SQLAlchemy│                                    │
+│  └──────────┘  └──────────┘                                     │
+└─────────────────────────────────────────────────────────────────┘
+                                       │
+                                       ▼
+                          ┌──────────────────────┐
+                          │  MySQL 8.4（Docker）  │
+                          │  ccc_browser 数据库   │
+                          └──────────────────────┘
+```
+
+### 2.2 五层架构说明
+
+#### 第 1 层：基础设施层
+
+- **MySQL 8.4**：Docker 容器化部署，存储用户、任务、执行日志等业务数据
+- **Playwright 浏览器引擎**：Chromium headful 模式，配合 `playwright-stealth` 反检测
+
+#### 第 2 层：浏览器自动化层
+
+- **Playwright Sync API**：所有浏览器操作在专用工作线程中执行，避免与 asyncio 事件循环冲突
+- **按省份隔离会话**：`BrowserSessionManager` 为每个省份维护独立的 `BrowserContext`，持久化 `storage_state` 到 `data/browser_states/` 目录
+- **ThreadPoolExecutor**：3 个工作线程（`task-exec`）并行执行任务，另有 3 个等待线程（`wait-block`）处理用户交互阻塞
+- **反检测**：`HumanBehavior` 模拟真人操作（随机延迟、随机点击位置、随机打字速度、随机滚动）
+
+#### 第 3 层：API 与实时通信层
+
+- **FastAPI REST**：提供认证、任务 CRUD、租户/设备管理等接口
+- **WebSocket 广播**：`ConnectionManager` 管理所有客户端连接，后端工作线程通过 `asyncio.run_coroutine_threadsafe` 安全地将消息投递到主事件循环进行广播
+
+#### 第 4 层：前端交互层
+
+- **Vue3 + Composition API**：响应式 UI，所有页面使用 `<script setup>` 语法
+- **Pinia 状态管理**：`auth`（认证）、`task`（任务列表 + WS 消息分发）、`execution`（执行状态机 + 演示模式）、`device`（设备标识）
+- **Element Plus**：UI 组件库
+- **WebSocket 自动重连**：3 秒间隔自动重连，消息分发到 task store 和 execution store
+
+#### 第 5 层：桌面集成层
+
+- **Tauri 2 + Rust**：提供桌面应用壳层
+- **设备标识持久化**：通过 `tauri-plugin-store` 将 `device_id` 存储到本地 `device.json`
+- **登录回调服务器**：本地启动 HTTP 服务器（随机端口），接收外部浏览器登录成功回调，通过 Tauri event 通知前端
+
+---
+
+## 3. 技术栈清单
+
+### 3.1 Python 后端（CCC_RPA_API）
+
+| 依赖 | 版本 | 用途 |
+|------|------|------|
+| fastapi | 0.115.0 | Web 框架 |
+| uvicorn[standard] | 0.30.6 | ASGI 服务器 |
+| sqlalchemy | 2.0.51 | ORM |
+| pymysql | 1.1.1 | MySQL 驱动 |
+| cryptography | 43.0.1 | 加密支持 |
+| pydantic-settings | 2.5.2 | 配置管理 |
+| python-dotenv | 1.0.1 | 环境变量加载 |
+| playwright | 1.60.0 | 浏览器自动化 |
+| playwright-stealth | 1.0.6 | 反自动化检测 |
+
+### 3.2 前端（CCC-BrowserV4/frontend）
+
+| 依赖 | 版本 | 用途 |
+|------|------|------|
+| vue | ^3.5.0 | UI 框架 |
+| vue-router | ^4.5.0 | 路由管理 |
+| pinia | ^2.3.0 | 状态管理 |
+| element-plus | ^2.9.0 | UI 组件库 |
+| @element-plus/icons-vue | ^2.3.0 | 图标库 |
+| axios | ^1.18.1 | HTTP 客户端 |
+| @tauri-apps/api | ^2.0.0 | Tauri JS API |
+| vite | ^5.4.0 | 构建工具 |
+| typescript | ~5.6.0 | 类型系统 |
+| vue-tsc | ^2.2.0 | Vue TypeScript 检查 |
+
+### 3.3 Tauri / Rust（CCC-BrowserV4/src-tauri）
+
+| 依赖 | 版本 | 用途 |
+|------|------|------|
+| tauri | 2 | 桌面应用框架 |
+| tauri-plugin-shell | 2 | Shell 命令插件 |
+| tauri-plugin-store | 2 | 本地键值存储插件 |
+| tauri-plugin-opener | 2 | 外部链接打开插件 |
+| serde | 1 (derive) | 序列化/反序列化 |
+| serde_json | 1 | JSON 处理 |
+| uuid | 1 (v4) | UUID 生成 |
+| rand | 0.8 | 随机数生成 |
+| tokio | 1 (full) | 异步运行时 |
+| tiny_http | 0.12 | 轻量 HTTP 服务器（登录回调） |
+| log | 0.4 | 日志 |
+| env_logger | 0.11 | 环境变量日志 |
+
+### 3.4 基础设施
+
+| 组件 | 版本 | 说明 |
+|------|------|------|
+| MySQL | 8.4 | Docker 容器，字符集 utf8mb4 |
+| Docker Compose | 3.8 | 容器编排 |
+
+---
+
+## 4. 项目结构
+
+```
+ccclubs_AI_RPA/
+├── CCC_RPA_API/                      # 核心后端（Python FastAPI）
+│   ├── app/
+│   │   ├── api/                      # API 路由层
+│   │   │   ├── auth.py               # 认证接口（登录/登出/验证）
+│   │   │   ├── tasks.py              # 任务 CRUD + 执行控制
+│   │   │   ├── tenants.py            # 租户列表（Mock）
+│   │   │   └── devices.py            # 设备列表（Mock）
+│   │   ├── browser/                  # 浏览器自动化层
+│   │   │   ├── session_manager.py    # 按省份隔离会话管理
+│   │   │   ├── site_automation.py    # 122.gov.cn 全站自动化
+│   │   │   ├── human_behavior.py     # 反检测真人行为模拟
+│   │   │   └── waiter.py             # 信号等待（暂停/恢复/取消）
+│   │   ├── models/                   # SQLAlchemy 数据模型
+│   │   │   ├── base.py               # 基类（created_at, updated_at）
+│   │   │   ├── user.py               # 用户模型
+│   │   │   ├── task.py               # 任务模型
+│   │   │   └── execution_log.py      # 执行日志模型
+│   │   ├── schemas/                  # Pydantic 请求/响应模型
+│   │   │   ├── auth.py               # 认证相关
+│   │   │   ├── task.py               # 任务 CRUD
+│   │   │   ├── execution.py          # 执行控制
+│   │   │   └── execution_log.py      # 执行日志
+│   │   ├── services/                 # 业务逻辑层
+│   │   │   ├── auth.py               # 认证服务
+│   │   │   ├── task.py               # 任务服务
+│   │   │   └── executor.py           # 核心执行引擎
+│   │   ├── ws/                       # WebSocket
+│   │   │   └── manager.py            # 连接管理与广播
+│   │   ├── config.py                 # 配置（数据库连接）
+│   │   ├── database.py               # 数据库引擎与会话
+│   │   └── main.py                   # FastAPI 入口
+│   ├── data/
+│   │   └── browser_states/           # 浏览器状态持久化（按省份）
+│   │       ├── 广东_state.json
+│   │       └── 浙江_state.json
+│   ├── .env                          # 环境变量
+│   └── requirements.txt              # Python 依赖
+│
+├── CCC-BrowserV4/                    # 桌面客户端
+│   ├── frontend/                     # Vue3 前端
+│   │   ├── src/
+│   │   │   ├── api/                  # API 调用层
+│   │   │   │   ├── request.ts        # Axios 实例（baseURL=/api）
+│   │   │   │   ├── auth.ts           # 认证 API + 登录流程
+│   │   │   │   ├── tasks.ts          # 任务 CRUD API
+│   │   │   │   ├── execution.ts      # 执行控制 API
+│   │   │   │   ├── device.ts         # 租户/设备 API
+│   │   │   │   └── ws.ts             # WebSocket 客户端（自动重连）
+│   │   │   ├── components/
+│   │   │   │   ├── layout/
+│   │   │   │   │   ├── AppLayout.vue # 主布局（侧边栏+内容区）
+│   │   │   │   │   ├── SideMenu.vue  # 侧边导航菜单
+│   │   │   │   │   └── StatusBar.vue # 底部状态栏
+│   │   │   │   └── ExecutionPanel.vue# 执行面板（二维码/单位选择/进度）
+│   │   │   ├── pages/
+│   │   │   │   ├── LoginPage.vue     # 登录页
+│   │   │   │   ├── HomePage.vue      # 首页/仪表盘
+│   │   │   │   ├── TaskPage.vue      # 任务列表页
+│   │   │   │   └── TaskEditPage.vue  # 任务编辑/创建页
+│   │   │   ├── stores/
+│   │   │   │   ├── auth.ts           # 认证状态（登录/登出/持久化）
+│   │   │   │   ├── task.ts           # 任务列表 + WS 消息分发
+│   │   │   │   ├── execution.ts      # 执行状态机 + 演示模式
+│   │   │   │   └── device.ts         # 设备标识
+│   │   │   ├── types/
+│   │   │   │   ├── index.ts          # 通用类型定义
+│   │   │   │   ├── execution.ts      # 执行相关类型
+│   │   │   │   └── execution-log.ts  # 执行日志类型
+│   │   │   ├── utils/
+│   │   │   │   └── tauri-bridge.ts   # Tauri 命令封装
+│   │   │   ├── router/
+│   │   │   │   └── index.ts          # 路由配置 + 守卫
+│   │   │   ├── App.vue               # 根组件
+│   │   │   └── main.ts               # 入口文件
+│   │   ├── vite.config.ts            # Vite 配置（代理/构建）
+│   │   ├── package.json
+│   │   └── tsconfig.json
+│   │
+│   ├── src-tauri/                    # Tauri Rust 层
+│   │   ├── src/
+│   │   │   ├── main.rs               # Tauri 入口
+│   │   │   ├── commands.rs           # 5 个 Tauri 命令
+│   │   │   └── device.rs             # 设备标识持久化
+│   │   ├── Cargo.toml
+│   │   └── tauri.conf.json
+│   │
+│   ├── backend/                      # 辅助后端（定位待明确）
+│   │   ├── app/
+│   │   │   ├── api/health.py         # 健康检查
+│   │   │   ├── config.py             # 配置（支持 MySQL/SQLite）
+│   │   │   ├── database.py           # 数据库引擎
+│   │   │   └── models/base.py        # 模型基类
+│   │   └── requirements.txt
+│   │
+│   └── docker-compose.yml            # MySQL 8.4 容器
+│
+└── project.md                        # 本文档
+```
+
+---
+
+## 5. 模块说明
+
+### 5.1 后端模块（CCC_RPA_API）
+
+#### API 层
+
+| 模块 | 路由前缀 | 说明 |
+|------|----------|------|
+| `auth.py` | `/api/auth` | 登录（POST /login）、登出（POST /logout）、验证（GET /verify） |
+| `tasks.py` | `/api/tasks` | 任务 CRUD、执行控制、日志查询、扫码完成、选择单位、取消执行 |
+| `tenants.py` | `/api/tenants` | 租户列表（Mock 数据：广东/浙江/江苏分公司） |
+| `devices.py` | `/api/devices` | 设备列表（Mock 数据：本地设备-A/B） |
+
+#### 服务层
+
+| 模块 | 说明 |
+|------|------|
+| `executor.py` | **核心执行引擎**。`ThreadPoolExecutor(max_workers=3)` 提交任务执行。包含完整的任务生命周期：浏览器初始化 → 登录检查 → 扫码 → 选择单位 → 保活循环 → 业务处理 |
+| `auth.py` | 认证服务：基于 client_id 的 upsert 登录，登出置 `is_active=False`，验证接口 |
+| `task.py` | 任务 CRUD 服务：分页查询（支持关键词/状态过滤）、创建/更新/软删除、触发异步执行、日志查询 |
+
+#### 浏览器层
+
+| 模块 | 说明 |
+|------|------|
+| `session_manager.py` | **按省份隔离会话管理**。专用 Playwright 工作线程（`playwright-worker`），通过任务队列串行执行所有 Playwright 操作。支持 `storage_state` 持久化、浏览器崩溃恢复 |
+| `site_automation.py` | **122.gov.cn 全站自动化**。覆盖 31 个省份的 URL 映射，登录状态检测、导航到登录页、二维码截取、单位列表抓取（多级选择器降级策略）、单位选择、页面保活、业务检测与执行 |
+| `human_behavior.py` | **反检测真人行为模拟**。随机延迟、模拟点击（带随机偏移）、模拟打字（逐字符随机延迟）、随机滚动、阅读等待 |
+| `waiter.py` | **信号等待机制**。基于 `threading.Event` 实现任务流程的暂停/恢复/取消，支持超时、非阻塞检查取消信号 |
+
+#### WebSocket 层
+
+| 模块 | 说明 |
+|------|------|
+| `manager.py` | `ConnectionManager` 管理所有 WebSocket 连接，支持 `broadcast` 广播 JSON 消息，自动清理断开的连接 |
+
+#### 数据层
+
+| 模块 | 说明 |
+|------|------|
+| `models/` | SQLAlchemy ORM 模型：`User`、`Task`、`TaskExecutionLog` |
+| `schemas/` | Pydantic 请求/响应模型，API 响应使用 camelCase 命名 |
+
+### 5.2 前端模块（CCC-BrowserV4/frontend）
+
+#### 页面
+
+| 页面 | 路由 | 说明 |
+|------|------|------|
+| `LoginPage.vue` | `/login` | 登录页，Tauri 环境下打开外部浏览器完成 OAuth 登录 |
+| `HomePage.vue` | `/` | 首页/仪表盘 |
+| `TaskPage.vue` | `/tasks` | 任务列表，支持搜索/筛选/执行/查看日志 |
+| `TaskEditPage.vue` | `/tasks/add`, `/tasks/edit/:id` | 任务创建/编辑，含租户/设备/省份选择 |
+
+#### 组件
+
+| 组件 | 说明 |
+|------|------|
+| `AppLayout.vue` | 主布局：侧边栏 + 顶部内容区 |
+| `SideMenu.vue` | 侧边导航菜单 |
+| `StatusBar.vue` | 底部状态栏 |
+| `ExecutionPanel.vue` | 执行面板：显示二维码、单位列表、执行进度、错误信息 |
+
+#### Store（Pinia）
+
+| Store | 说明 |
+|-------|------|
+| `auth.ts` | 认证状态管理：登录/登出/持久化到 localStorage/开发模式虚拟登录 |
+| `task.ts` | 任务列表管理 + WebSocket 消息分发中枢：接收 WS 消息，更新任务状态，转发给 execution store |
+| `execution.ts` | **执行状态机**：idle → checking_login → qr_scanning → waiting_company → executing → keeping_alive → completed/failed/cancelled。支持演示模式（模拟完整流程） |
+| `device.ts` | 设备标识管理：通过 Tauri Bridge 获取持久化 device_id |
+
+#### API 层
+
+| 模块 | 说明 |
+|------|------|
+| `request.ts` | Axios 实例，`baseURL=/api`，响应拦截器自动解包 |
+| `auth.ts` | 认证 API + `performLogin` 完整登录流程（获取设备ID → 生成clientId/token → 启动回调服务器 → 打开外部浏览器） |
+| `tasks.ts` | 任务 CRUD + 执行触发 + 日志查询 |
+| `execution.ts` | 执行控制：扫码完成、选择单位、取消执行 |
+| `device.ts` | 租户列表 + 设备列表 |
+| `ws.ts` | `TaskWebSocket` 单例，自动重连（3s 间隔），消息处理器注册/注销 |
+
+### 5.3 Tauri 层
+
+#### commands.rs — 5 个 Tauri 命令
+
+| 命令 | 说明 |
+|------|------|
+| `get_device_id` | 获取持久化设备唯一标识 |
+| `generate_client_id` | 生成 UUID v4 客户端标识（每次登录会话唯一） |
+| `generate_token` | 生成 32 位 hex 随机 token |
+| `open_login_browser` | 通过系统默认浏览器打开指定 URL |
+| `start_login_callback_server` | 启动本地 HTTP 回调服务器（随机端口），接收登录成功回调，通过 Tauri event 通知前端 |
+
+#### device.rs — 设备标识持久化
+
+- 使用 `tauri-plugin-store` 将 `device_id`（UUID v4）存储到 `device.json`
+- 应用启动时自动初始化（`init_device_store`），若不存在则生成新的 device_id
+
+---
+
+## 6. API 接口规范
+
+### 6.1 认证接口
+
+| 方法 | 路径 | 说明 | 请求体 | 响应 |
+|------|------|------|--------|------|
+| POST | `/api/auth/login` | 登录 | `{client_id, token, device_id, username?}` | `{userId, username, token}` |
+| POST | `/api/auth/logout` | 登出 | `{userId}` | `{message: "登出成功"}` |
+| GET | `/api/auth/verify?userId=xxx` | 验证登录状态 | — | `{valid, userId?, username?}` |
+
+### 6.2 任务接口
+
+| 方法 | 路径 | 说明 | 参数 | 响应 |
+|------|------|------|------|------|
+| GET | `/api/tasks` | 任务列表 | `keyword?, status?, page=1, page_size=20` | `{items[], total, page, page_size}` |
+| POST | `/api/tasks` | 创建任务 | `{name, tenant_id?, device_id?, customer_name?, handler_account?, sub_tasks?, province?, remark?}` | `TaskResponse` |
+| GET | `/api/tasks/{id}` | 获取任务 | — | `TaskResponse` |
+| PUT | `/api/tasks/{id}` | 更新任务 | 部分更新字段 | `TaskResponse` |
+| DELETE | `/api/tasks/{id}` | 删除任务（软删除） | — | `{message: "删除成功"}` |
+| POST | `/api/tasks/{id}/execute` | 触发执行 | — | `TaskResponse`（status=running） |
+| GET | `/api/tasks/{id}/logs` | 执行日志 | `page=1, page_size=20` | `{items[], total}` |
+| POST | `/api/tasks/{id}/scan-complete` | 扫码完成通知 | — | `{success: true}` |
+| POST | `/api/tasks/{id}/select-company` | 选择单位通知 | `{company_id, company_name}` | `{success: true}` |
+| POST | `/api/tasks/{id}/cancel-execution` | 取消执行 | — | `{success: true}` |
+
+### 6.3 租户与设备接口
+
+| 方法 | 路径 | 说明 | 响应 |
+|------|------|------|------|
+| GET | `/api/tenants` | 租户列表（Mock） | `[{id, name}]` |
+| GET | `/api/devices` | 设备列表（Mock） | `[{id, name}]` |
+
+### 6.4 系统接口
+
+| 方法 | 路径 | 说明 | 响应 |
+|------|------|------|------|
+| GET | `/health` | 健康检查 | `{status: "ok", service: "ccc-rpa-api"}` |
+
+### 6.5 WebSocket
+
+**连接地址**：`ws://host/ws`
+
+**消息格式**：`{type: string, data: object}`
+
+| 消息类型 | 方向 | 说明 | data 字段 |
+|----------|------|------|-----------|
+| `execution_progress` | 后端→前端 | 执行进度更新 | `{taskId, step, message}` |
+| `qr_code` | 后端→前端 | 推送二维码 | `{taskId, qrImage}` |
+| `company_list` | 后端→前端 | 推送单位列表 | `{taskId, companies[]}` |
+| `login_result` | 后端→前端 | 登录结果 | `{taskId, success, message}` |
+| `execution_error` | 后端→前端 | 执行错误 | `{taskId, message}` |
+| `task_status_update` | 后端→前端 | 任务状态变更 | `{taskId, status, lastResult, lastExecutedAt}` |
+
+---
+
+## 7. 数据模型
+
+### 7.1 User（users 表）
+
+| 字段 | 类型 | 约束 | 说明 |
+|------|------|------|------|
+| id | int | PK, AUTO_INCREMENT | 主键 |
+| user_id | varchar(64) | UNIQUE, INDEX | 用户标识 |
+| username | varchar(128) | NOT NULL | 用户名 |
+| client_id | varchar(64) | NULLABLE | 客户端标识 |
+| token | varchar(128) | NULLABLE | 登录 token |
+| device_id | varchar(64) | NULLABLE | 设备标识 |
+| is_active | boolean | DEFAULT true | 是否活跃 |
+| created_at | datetime | server_default=now() | 创建时间 |
+| updated_at | datetime | onupdate=now() | 更新时间 |
+
+### 7.2 Task（tasks 表）
+
+| 字段 | 类型 | 约束 | 说明 |
+|------|------|------|------|
+| id | int | PK, AUTO_INCREMENT | 主键 |
+| name | varchar(256) | NOT NULL, INDEX | 任务名称 |
+| status | varchar(32) | DEFAULT "pending", INDEX | 状态：pending/running/completed/failed |
+| tenant_id | varchar(64) | NULLABLE | 租户 ID |
+| device_id | varchar(64) | NULLABLE | 设备 ID |
+| customer_name | varchar(128) | NULLABLE | 客户名称 |
+| handler_account | varchar(64) | NULLABLE | 处理账号 |
+| sub_tasks | text | NULLABLE | 子任务列表（JSON 数组字符串） |
+| province | varchar(64) | NULLABLE | 省份 |
+| last_executed_at | datetime | NULLABLE | 上次执行时间 |
+| next_executed_at | datetime | NULLABLE | 下次执行时间 |
+| last_result | varchar(32) | NULLABLE | 上次结果：success/failed/None |
+| remark | text | NULLABLE | 备注 |
+| deleted | boolean | DEFAULT false, INDEX | 软删除标记 |
+| created_at | datetime | server_default=now() | 创建时间 |
+| updated_at | datetime | onupdate=now() | 更新时间 |
+
+### 7.3 TaskExecutionLog（task_execution_log 表）
+
+| 字段 | 类型 | 约束 | 说明 |
+|------|------|------|------|
+| id | int | PK, AUTO_INCREMENT | 主键 |
+| task_id | int | NOT NULL, INDEX | 关联任务 ID |
+| task_name | varchar(256) | NOT NULL | 任务名称（冗余） |
+| started_at | datetime | NOT NULL | 开始时间 |
+| finished_at | datetime | NULLABLE | 结束时间 |
+| status | varchar(32) | DEFAULT "running" | 状态：running/completed/failed |
+| result_message | text | NULLABLE | 结果消息 |
+| created_at | datetime | server_default=now() | 创建时间 |
+| updated_at | datetime | onupdate=now() | 更新时间 |
+
+---
+
+## 8. 核心业务流程
+
+### 8.1 任务执行完整流程
+
+```
+用户点击"执行"
+    │
+    ▼
+POST /api/tasks/{id}/execute
+    │  TaskService.execute_task()
+    │  设置 task.status = "running"
+    │  submit_task_execution(task_id)  → ThreadPoolExecutor 提交
+    │
+    ▼
+[工作线程] _run_task_logic(task_id)
+    │
+    ├─ 1. 创建执行日志（TaskExecutionLog）
+    │
+    ├─ 2. 获取浏览器上下文
+    │     BrowserSessionManager.get_context(province)
+    │     ↳ 若已有该省份 context 则复用，否则从 storage_state 恢复或新建
+    │     ↳ 广播: execution_progress {step: "checking_login"}
+    │
+    ├─ 3. 检查登录状态
+    │     SiteAutomation.check_login_status(context, province)
+    │     ↳ 检测页面是否出现"退出"或".user-info"元素
+    │
+    ├─ 4a. [未登录] 扫码登录流程
+    │     ├─ 导航到登录页（gab.122.gov.cn/m/login?t=2）
+    │     ├─ 截取二维码元素 → base64 图片
+    │     ├─ 广播: qr_code {qrImage}
+    │     ├─ 广播: execution_progress {step: "qr_scanning"}
+    │     ├─ ExecutionWaiter.wait_for(task_id, timeout=120)  ← 阻塞等待
+    │     │     ↑ 前端调用 POST /scan-complete 唤醒
+    │     ├─ 保存 storage_state
+    │     └─ 广播: login_result {success: true}
+    │
+    ├─ 4b. [已登录] 直接打开省份首页
+    │
+    ├─ 5. 抓取单位列表
+    │     SiteAutomation.scrape_company_list(page)
+    │     ↳ 多级选择器降级策略（14 种选择器 → 文本分析）
+    │     ├─ 广播: company_list {companies[]}
+    │     ├─ 广播: execution_progress {step: "waiting_company"}
+    │     ├─ ExecutionWaiter.wait_for(task_id, timeout=300)  ← 阻塞等待
+    │     │     ↑ 前端调用 POST /select-company 唤醒
+    │     └─ 获取 company_id + company_name
+    │
+    ├─ 6. 选择单位
+    │     SiteAutomation.select_company(page, company_id, company_name)
+    │     ↳ 多策略匹配（文本匹配 → data-id → 索引 → JS 回退）
+    │     ↳ 点击单位 → 点击登录按钮 → 等待页面跳转
+    │
+    ├─ 7. 保活循环（最大 8 小时）
+    │     while True:
+    │       ├─ 检查浏览器存活（崩溃则恢复）
+    │       ├─ 检查超时（8 小时）
+    │       ├─ 检查取消信号（非阻塞）
+    │       ├─ SiteAutomation.keep_alive_on_page(page)
+    │       │   ↳ 随机操作：小幅度滚动 / 鼠标移动 / Tab / 阅读等待
+    │       │   ↳ 自动关闭意外弹窗
+    │       ├─ SiteAutomation.check_pending_business(page)
+    │       │   ↳ 检测待处理业务（备案/违章/合同调整等）
+    │       ├─ [有业务] SiteAutomation.execute_sub_task(page, type)
+    │       └─ 等待保活间隔（30~120s，分段等待响应取消信号）
+    │
+    └─ 8. 完成任务
+          ├─ 关闭页面
+          ├─ 更新 task.status = "completed"
+          ├─ 更新执行日志
+          ├─ 广播: task_status_update {status: "completed"}
+          └─ 清理 ExecutionWaiter 资源
+```
+
+### 8.2 前端执行状态机
+
+```
+idle → checking_login → qr_scanning → waiting_company → executing → keeping_alive → completed
+                           │                                      │                │
+                           └─→ failed ←────────────────────────────┘                │
+                           └─→ cancelled                                            │
+                                                                                    └─→ failed
+```
+
+---
+
+## 9. 部署与启动
+
+### 9.1 Docker MySQL 启动
+
+```bash
+cd CCC-BrowserV4
+docker-compose up -d
+```
+
+MySQL 配置（docker-compose.yml）：
+
+| 配置项 | 值 |
+|--------|-----|
+| 镜像 | mysql:8.4 |
+| 端口 | 3306:3306 |
+| 数据库 | ccc_browser |
+| 用户 | ccc_user |
+| 密码 | ccc_password_2025 |
+| Root 密码 | root_password_2025 |
+| 字符集 | utf8mb4 / utf8mb4_unicode_ci |
+
+### 9.2 后端启动
+
+```bash
+cd CCC_RPA_API
+python -m venv .venv
+source .venv/bin/activate       # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+playwright install chromium
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+### 9.3 前端启动（开发模式）
+
+```bash
+cd CCC-BrowserV4/frontend
+npm install
+npm run dev                     # Vite 开发服务器，端口 5173
+```
+
+Vite 开发代理配置（`vite.config.ts`）：
+
+| 路径 | 代理目标 | 说明 |
+|------|----------|------|
+| `/api` | `http://localhost:8000` | REST API |
+| `/ws` | `ws://localhost:8000` | WebSocket |
+
+### 9.4 Tauri 开发与构建
+
+```bash
+cd CCC-BrowserV4/frontend
+npm run tauri dev               # Tauri 开发模式（热更新 + Rust 编译）
+npm run tauri build             # 构建生产版本
+```
+
+### 9.5 环境变量配置
+
+**CCC_RPA_API/.env**：
+
+```env
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_USERNAME=ccc_user
+DB_PASSWORD=ccc_password_2025
+DB_DATABASE=ccc_browser
+```
+
+**CCC-BrowserV4/backend/.env**：
+
+```env
+DB_TYPE=mysql                   # 或 sqlite
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_USERNAME=ccc_user
+DB_PASSWORD=ccc_password_2025
+DB_DATABASE=ccc_browser
+```
+
+---
+
+## 10. 开发规范
+
+### 10.1 代码风格
+
+- **Python**：标准 PEP8 风格，使用 SQLAlchemy 2.0 Mapped 声明式模型，Pydantic v2 数据校验
+- **前端**：TypeScript + Vue3 Composition API（`<script setup>`），Pinia 状态管理，camelCase API 响应字段
+
+### 10.2 浏览器自动化规范
+
+- **非侵入式保活**：保活操作仅允许小幅度滚动（`scrollBy ±150~200px`）、鼠标随机移动、键盘 Tab、模拟阅读等待
+- **禁止行为**：禁止点击业务链接或可交互元素，禁止触发布局重排或页面导航，禁止提交表单
+- **弹窗处理**：自动识别并关闭意外弹出的对话框（关闭/取消按钮）
+- **等待策略**：统一使用 `domcontentloaded`（政府网站 `networkidle` 容易超时），仅在登录状态检查时使用 `networkidle`
+- **反检测**：禁用 `AutomationControlled` 特征，覆写 `navigator.webdriver`，模拟真人鼠标轨迹（带随机步数和偏移）
+
+### 10.3 WebSocket 规范
+
+- **后端广播**：工作线程通过 `asyncio.run_coroutine_threadsafe(ws_manager.broadcast(message), _main_loop)` 安全广播，避免在非 asyncio 线程中直接调用
+- **前端重连**：`TaskWebSocket` 单例，断线后 3 秒自动重连，支持手动 `connect()`/`disconnect()`
+- **消息分发**：前端 `task store` 作为 WS 消息分发中枢，更新任务状态后转发给 `execution store`
+
+### 10.4 线程模型
+
+```
+主线程（asyncio 事件循环）
+  └─ FastAPI + WebSocket
+  └─ uvicorn
+
+playwright-worker 线程
+  └─ Playwright Sync API
+  └─ Chromium 进程管理
+  └─ 所有浏览器操作通过任务队列串行执行
+
+task-exec 线程池（3 workers）
+  └─ 任务执行逻辑（_run_task_logic）
+  └─ 通过 BrowserSessionManager.run() 提交浏览器操作到 PW 线程
+
+wait-block 线程池（3 workers）
+  └─ ExecutionWaiter.wait_for() 阻塞等待
+  └─ 不占用 PW 线程
+```
+
+### 10.5 Playwright 线程安全
+
+所有 Playwright 操作必须通过 `BrowserSessionManager.run(fn)` 提交到专用 `playwright-worker` 线程执行，避免多线程冲突。若当前线程已是 PW 工作线程，则直接执行（防死锁）。
+
+---
+
+## 11. 当前状态与待办
+
+### 11.1 已完成
+
+- [x] 完整的任务 CRUD + 异步执行流程
+- [x] 122.gov.cn 全站自动化（31 省份 URL 映射）
+- [x] 二维码扫码登录 + 单位选择完整流程
+- [x] 页面保活循环（非侵入式操作）
+- [x] WebSocket 实时消息广播（后端→前端）
+- [x] 前端执行状态机 + 演示模式
+- [x] Tauri 桌面壳层（设备标识 + 登录回调）
+- [x] 浏览器崩溃自动恢复机制
+- [x] 任务执行取消功能
+
+### 11.2 待办事项
+
+| 待办 | 说明 |
+|------|------|
+| 租户/设备 API 持久化 | 当前使用 Mock 数据，待接入数据库 |
+| 引入 Alembic | 当前数据库迁移使用 `startup ALTER TABLE`，待引入专业迁移工具 |
+| CCC-BrowserV4/backend 定位 | 辅助后端功能定位待明确（已有配置/数据库/健康检查模块） |
+| 子任务实际执行逻辑 | `SiteAutomation.execute_sub_task()` 当前为占位实现 |
+| 浏览器状态文件 | `data/browser_states/` 已有广东/浙江两省份状态文件 |
+| 认证鉴权 | 当前无 Bearer Token 验证，登录状态仅靠 `is_active` 标记 |
+| 错误处理增强 | 统一错误码体系、接口限流 |
+
+---
+
+> 本文档基于项目实际代码编写，反映当前实现状态。
 # 
 
 # 商用级 AI 浏览器系统软件需求规格说明书（SRS V1\.1）

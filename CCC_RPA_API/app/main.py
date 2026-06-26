@@ -1,9 +1,13 @@
+import asyncio
 from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from app.database import engine, Base
 from app.models import User, Task, TaskExecutionLog  # 确保模型被导入
-from app.api import auth, tasks
+from app.api import auth, tasks, tenants, devices
 from app.ws.manager import ws_manager
+
+# 主事件循环引用，供工作线程中的 WebSocket 广播使用
+_main_loop: asyncio.AbstractEventLoop | None = None
 
 app = FastAPI(title="CCC RPA API", version="1.0.0")
 
@@ -19,6 +23,15 @@ app.add_middleware(
 # 注册路由
 app.include_router(auth.router)
 app.include_router(tasks.router)
+app.include_router(tenants.router)
+app.include_router(devices.router)
+
+
+@app.on_event("startup")
+async def startup_capture_loop():
+    """捕获主事件循环，供工作线程 WebSocket 广播使用"""
+    global _main_loop
+    _main_loop = asyncio.get_event_loop()
 
 
 @app.on_event("startup")
@@ -55,6 +68,16 @@ def startup():
         # 添加 handler_account 列
         try:
             db.execute(text("ALTER TABLE tasks ADD COLUMN handler_account VARCHAR(64) NULL"))
+        except Exception:
+            pass
+        # 添加 tenant_id 列
+        try:
+            db.execute(text("ALTER TABLE tasks ADD COLUMN tenant_id VARCHAR(64) NULL"))
+        except Exception:
+            pass
+        # 添加 device_id 列
+        try:
+            db.execute(text("ALTER TABLE tasks ADD COLUMN device_id VARCHAR(64) NULL"))
         except Exception:
             pass
         db.commit()

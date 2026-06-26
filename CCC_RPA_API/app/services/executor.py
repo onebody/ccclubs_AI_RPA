@@ -20,24 +20,53 @@ _wait_executor = ThreadPoolExecutor(max_workers=3, thread_name_prefix="wait-bloc
 
 
 def _broadcast(msg_type: str, data: dict):
-    """广播 WebSocket 消息"""
+    """在工作线程中安全地广播 WebSocket 消息，使用主事件循环"""
     message = {"type": msg_type, "data": data}
     try:
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            asyncio.run_coroutine_threadsafe(ws_manager.broadcast(message), loop)
+        from app.main import _main_loop
+        if _main_loop and _main_loop.is_running():
+            asyncio.run_coroutine_threadsafe(ws_manager.broadcast(message), _main_loop)
         else:
-            loop.run_until_complete(ws_manager.broadcast(message))
-    except RuntimeError:
-        try:
-            asyncio.run(ws_manager.broadcast(message))
-        except Exception:
-            pass
+            logger.warning(f"主事件循环不可用，无法广播消息: {msg_type}")
+    except Exception as e:
+        logger.error(f"广播消息失败: {msg_type}, 错误: {e}")
 
 
 def _pw(fn):
-    """简写：在 Playwright 工作线程中执行函数"""
+    """简写：在 Playwright 工作线程中执行函数，带浏览器存活检查"""
+    if not BrowserSessionManager.check_alive():
+        raise RuntimeError("浏览器已关闭，需要恢复会话")
     return BrowserSessionManager.run(fn)
+
+
+def _recover_checkpoint(province: str, context, page, task_id: int, step: str):
+    """检查浏览器存活状态，如已崩溃则恢复会话并返回新的 context 和 page"""
+    if BrowserSessionManager.check_alive():
+        # 浏览器存活，记录当前页面状态用于调试
+        try:
+            pages = context.pages if hasattr(context, 'pages') else []
+            for p in pages:
+                logger.info(f"[recover] step={step}, 当前页面 URL: {p.url}")
+            if page:
+                page.screenshot(path="/tmp/recover_checkpoint.png")
+                logger.debug("[recover] 已保存检查点截图到 /tmp/recover_checkpoint.png")
+        except Exception as e:
+            logger.warning(f"[recover] 页面状态检查失败: {e}")
+        return context, page
+    logger.warning("浏览器已关闭，尝试恢复...")
+    _broadcast("execution_progress", {
+        "taskId": task_id, "step": step,
+        "message": "浏览器异常，正在恢复...",
+    })
+    BrowserSessionManager.recover(province)
+    context = BrowserSessionManager.get_context(province)
+    page = _pw(lambda: context.new_page())
+    _pw(lambda: page.goto(
+        SiteAutomation.get_province_url(province),
+        wait_until="domcontentloaded", timeout=30000,
+    ))
+    logger.info("浏览器恢复完成，已重新打开页面")
+    return context, page
 
 
 def _wait_for_user(task_id: int, timeout: int = 300):
@@ -146,26 +175,97 @@ def _run_task_logic(task_id: int):
             if waiter_data and waiter_data.get("cancelled"):
                 raise Exception("用户取消执行")
             company_id = waiter_data.get("companyId", "0") if waiter_data else "0"
+            company_name = waiter_data.get("companyName", "") if waiter_data else ""
         except TimeoutError:
             raise Exception("选择单位等待超时")
 
         # 5. 选择单位（PW 线程）
         _broadcast("execution_progress", {
             "taskId": task_id, "step": "executing",
+            "message": "正在登录单位账户...",
+        })
+        _broadcast("execution_progress", {
+            "taskId": task_id, "step": "executing",
             "message": "正在切换到目标单位...",
         })
-        _pw(lambda: SiteAutomation.select_company(page, company_id))
+        context, page = _recover_checkpoint(province, context, page, task_id, "executing")
+        success = _pw(lambda: SiteAutomation.select_company(page, company_id, company_name))
+        if not success:
+            raise Exception(f"选择单位失败: company_id={company_id}, company_name={company_name}")
 
-        # 6. 执行子任务（PW 线程）
-        for sub_task in sub_tasks:
-            _broadcast("execution_progress", {
-                "taskId": task_id, "step": "executing",
-                "message": f"正在执行: {sub_task}",
-            })
-            result = _pw(lambda st=sub_task: SiteAutomation.execute_sub_task(page, st, {}))
-            logger.info(f"子任务 {sub_task} 结果: {result}")
+        # 6. 进入保活循环
+        # 为保活循环注册可取消的信号事件
+        ExecutionWaiter.register_check(task_id)
+        _broadcast("execution_progress", {
+            "taskId": task_id, "step": "keeping_alive",
+            "message": "页面保活中，等待业务触发...",
+        })
 
-        # 7. 完成（PW 线程）
+        max_keep_alive_hours = 8  # 最大保活时长（小时）
+        keep_alive_start = time.time()
+        business_executed = []
+
+        while True:
+            # 检查浏览器是否存活
+            context, page = _recover_checkpoint(province, context, page, task_id, "keeping_alive")
+
+            # 检查是否超时
+            elapsed_hours = (time.time() - keep_alive_start) / 3600
+            if elapsed_hours >= max_keep_alive_hours:
+                logger.info(f"保活达到最大时长 {max_keep_alive_hours} 小时，任务完成")
+                break
+
+            # 检查取消信号（非阻塞）
+            try:
+                cancel_data = ExecutionWaiter.check_signal(task_id)
+                if cancel_data and cancel_data.get("cancelled"):
+                    logger.info(f"用户取消执行 task_id={task_id}")
+                    break
+            except Exception:
+                pass
+
+            # 执行一次保活操作（在当前业务页面执行，不跳转）
+            interval = _pw(lambda: SiteAutomation.keep_alive_on_page(page))
+
+            # 检查是否有待处理业务
+            pending = _pw(lambda: SiteAutomation.check_pending_business(page))
+
+            if pending:
+                for biz in pending:
+                    biz_type = biz.get("type", "")
+                    if biz_type not in business_executed:
+                        _broadcast("execution_progress", {
+                            "taskId": task_id, "step": "executing",
+                            "message": f"检测到待处理业务: {biz_type}，正在处理...",
+                        })
+                        result = _pw(lambda bt=biz_type: SiteAutomation.execute_sub_task(page, bt, {}))
+                        logger.info(f"业务 {biz_type} 结果: {result}")
+                        business_executed.append(biz_type)
+                        _broadcast("execution_progress", {
+                            "taskId": task_id, "step": "keeping_alive",
+                            "message": f"业务 {biz_type} 处理完成，继续保活...",
+                        })
+                # 处理完业务后不跳转回首页，停留在当前业务页面继续保活
+                logger.info("业务处理完成，停留在当前业务页面继续保活")
+            else:
+                logger.debug(f"保活循环: 无待处理业务, 等待 {interval:.0f}s")
+
+            # 等待保活间隔（分段等待，便于响应取消信号）
+            wait_end = time.time() + interval
+            cancelled_during_wait = False
+            while time.time() < wait_end:
+                try:
+                    cancel_data = ExecutionWaiter.check_signal(task_id)
+                    if cancel_data and cancel_data.get("cancelled"):
+                        cancelled_during_wait = True
+                        break
+                except Exception:
+                    pass
+                time.sleep(min(5, max(0.1, wait_end - time.time())))
+            if cancelled_during_wait:
+                break
+
+        # 8. 完成任务
         _pw(lambda: page.close())
         finished_at = datetime.now()
         task.status = "completed"
@@ -174,7 +274,7 @@ def _run_task_logic(task_id: int):
         task.next_executed_at = finished_at + timedelta(days=1)
         log.finished_at = finished_at
         log.status = "completed"
-        log.result_message = "执行成功"
+        log.result_message = f"执行成功，处理业务: {', '.join(business_executed) if business_executed else '无'}"
         db.commit()
 
         _broadcast("task_status_update", {

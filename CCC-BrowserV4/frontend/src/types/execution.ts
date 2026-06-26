@@ -1,4 +1,4 @@
-export type ExecutionStep = 'idle' | 'checking_login' | 'qr_scanning' | 'waiting_company' | 'executing' | 'completed' | 'failed' | 'cancelled'
+export type ExecutionStep = 'idle' | 'checking_login' | 'qr_scanning' | 'waiting_company' | 'executing' | 'keeping_alive' | 'completed' | 'failed' | 'cancelled'
 
 export interface CompanyInfo {
   id: string

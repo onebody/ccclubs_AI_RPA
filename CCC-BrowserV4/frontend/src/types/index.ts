@@ -25,6 +25,8 @@ export interface TaskInfo {
   id: number
   name: string
   status: 'pending' | 'running' | 'completed' | 'failed'
+  tenantId: string | null
+  deviceId: string | null
   customerName: string | null
   handlerAccount: string | null
   subTasks: string[] | null

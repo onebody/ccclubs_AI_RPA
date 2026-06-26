@@ -34,10 +34,11 @@
             <el-button
               type="success"
               size="small"
-              :loading="executingId === task.id"
+              :disabled="executionStore.activeTaskId === task.id"
+              :loading="executionStore.activeTaskId === task.id && executionStore.step === 'checking_login'"
               @click.stop="handleExecute(task)"
               style="margin-left: auto"
-            >执行</el-button>
+            >{{ executionStore.activeTaskId === task.id ? '执行中' : '执行' }}</el-button>
           </div>
         </template>
 
@@ -107,6 +108,12 @@
             </template>
           </el-dropdown>
         </div>
+
+        <!-- 内联执行面板：当该任务正在执行时显示 -->
+        <ExecutionPanel
+          v-if="executionStore.activeTaskId === task.id"
+          :task-id="task.id"
+        />
       </el-card>
 
       <el-empty v-if="!taskStore.loading && taskStore.taskList.length === 0" description="暂无任务数据" />
@@ -126,8 +133,6 @@
     </div>
   </div>
 
-  <!-- 执行面板 -->
-  <ExecutionPanel />
 </template>
 
 <script setup lang="ts">
@@ -148,7 +153,7 @@ const searchKeyword = ref('')
 const statusFilter = ref('')
 const currentPage = ref(1)
 const pageSize = ref(12)
-const executingId = ref<number | null>(null)
+
 
 onMounted(() => {
   reload()
@@ -248,7 +253,6 @@ function handleEdit(task: TaskInfo) {
 }
 
 async function handleExecute(task: TaskInfo) {
-  executingId.value = task.id
   try {
     await taskStore.executeTaskById(task.id)
     executionStore.startExecution(task.id)
@@ -259,8 +263,6 @@ async function handleExecute(task: TaskInfo) {
   } catch (error: any) {
     const detail = error?.response?.data?.detail || '执行失败'
     ElMessage.warning(detail)
-  } finally {
-    executingId.value = null
   }
 }
 

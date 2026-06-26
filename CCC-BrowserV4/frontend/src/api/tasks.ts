@@ -10,7 +10,14 @@ export function fetchTask(id: number) {
   return request.get(`/tasks/${id}`)
 }
 
-export function createTask(data: { name: string; sub_tasks?: string[] | null; province?: string | null; remark?: string }) {
+export function createTask(data: {
+  name: string
+  tenant_id?: string | null
+  device_id?: string | null
+  sub_tasks?: string[] | null
+  province?: string | null
+  remark?: string
+}) {
   return request.post('/tasks', data)
 }
 
