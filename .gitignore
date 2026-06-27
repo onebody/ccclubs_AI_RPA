@@ -67,3 +67,4 @@ __pycache__/
 *.sqlite
 *.db
 .qoder/
+subtask_options.png
