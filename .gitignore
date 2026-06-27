@@ -66,3 +66,4 @@ __pycache__/
 # Database
 *.sqlite
 *.db
+.qoder/
