@@ -1,0 +1,13 @@
+schema_version: 1
+module_path: error_handling
+title: 错误处理与异常传播机制
+scope: []
+source_files:
+    - CCC_RPA_API/app/api/tasks.py
+    - CCC_RPA_API/app/services/executor.py
+    - CCC_RPA_API/app/main.py
+    - CCC-BrowserV4/frontend/src/api/request.ts
+    - CCC-BrowserV4/frontend/src/stores/execution.ts
+    - CCC_RPA_API/app/browser/site_automation.py
+depends_on: []
+related_to: []

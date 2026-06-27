@@ -1,0 +1,223 @@
+# 知识卡导出索引文件
+schema_version: 1
+locale: zh-CN
+branch: master
+nodes_managed: true
+exported_at: "2026-06-26T17:53:45Z"
+modules:
+    "":
+        dir_name: CCC RPA 自动化平台
+        title: CCC RPA 自动化平台
+        scope:
+            - .gitignore
+            - project.md
+        source_files: []
+        children:
+            - ccc_browser_v4
+            - ccc_rpa_api
+        depends_on: []
+        related_to: []
+    build_system:
+        dir_name: 构建与部署体系
+        title: 构建与部署体系
+        scope: []
+        source_files:
+            - CCC-BrowserV4/src-tauri/Cargo.toml
+            - CCC-BrowserV4/src-tauri/tauri.conf.json
+            - CCC-BrowserV4/frontend/package.json
+            - CCC-BrowserV4/frontend/vite.config.ts
+            - CCC-BrowserV4/docker-compose.yml
+            - CCC-BrowserV4/backend/requirements.txt
+            - CCC_RPA_API/requirements.txt
+        children: []
+        depends_on: []
+        related_to: []
+    ccc_browser_v4:
+        dir_name: CCC-BrowserV4 RPA 桌面客户端
+        title: CCC-BrowserV4 RPA 桌面客户端
+        scope:
+            - CCC-BrowserV4/
+        source_files: []
+        children:
+            - ccc_browser_v4/backend_api
+            - ccc_browser_v4/frontend_spa
+            - ccc_browser_v4/tauri_native
+        depends_on: []
+        related_to: []
+    ccc_browser_v4/backend_api:
+        dir_name: CCC-BrowserV4 后端 API 基础架构
+        title: CCC-BrowserV4 后端 API 基础架构
+        scope:
+            - CCC-BrowserV4/backend/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    ccc_browser_v4/frontend_spa:
+        dir_name: CCC浏览器V4前端单页应用
+        title: CCC浏览器V4前端单页应用
+        scope:
+            - CCC-BrowserV4/frontend/
+        source_files: []
+        children:
+            - ccc_browser_v4/frontend_spa/auth
+            - ccc_browser_v4/frontend_spa/core
+            - ccc_browser_v4/frontend_spa/execution
+            - ccc_browser_v4/frontend_spa/layout
+            - ccc_browser_v4/frontend_spa/tasks
+        depends_on: []
+        related_to: []
+    ccc_browser_v4/frontend_spa/auth:
+        dir_name: 认证与登录管理
+        title: 认证与登录管理
+        scope:
+            - CCC-BrowserV4/frontend/src/pages/LoginPage.vue
+            - CCC-BrowserV4/frontend/src/stores/auth.ts
+            - CCC-BrowserV4/frontend/src/api/auth.ts
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: ccc_browser_v4/tauri_native
+            - path: ccc_rpa_api
+    ccc_browser_v4/frontend_spa/core:
+        dir_name: 应用核心架构与Tauri桥接
+        title: 应用核心架构与Tauri桥接
+        scope:
+            - CCC-BrowserV4/frontend/src/router/
+            - CCC-BrowserV4/frontend/src/App.vue
+            - CCC-BrowserV4/frontend/src/main.ts
+            - CCC-BrowserV4/frontend/src/utils/
+            - CCC-BrowserV4/frontend/src/assets/styles/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    ccc_browser_v4/frontend_spa/execution:
+        dir_name: 任务执行状态管理与交互
+        title: 任务执行状态管理与交互
+        scope:
+            - CCC-BrowserV4/frontend/src/components/ExecutionPanel.vue
+            - CCC-BrowserV4/frontend/src/stores/execution.ts
+            - CCC-BrowserV4/frontend/src/api/execution.ts
+            - CCC-BrowserV4/frontend/src/api/ws.ts
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: ccc_rpa_api
+    ccc_browser_v4/frontend_spa/layout:
+        dir_name: 应用布局与导航组件
+        title: 应用布局与导航组件
+        scope:
+            - CCC-BrowserV4/frontend/src/components/layout/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    ccc_browser_v4/frontend_spa/tasks:
+        dir_name: 任务管理与执行监控
+        title: 任务管理与执行监控
+        scope:
+            - CCC-BrowserV4/frontend/src/pages/HomePage.vue
+            - CCC-BrowserV4/frontend/src/pages/TaskPage.vue
+            - CCC-BrowserV4/frontend/src/pages/TaskEditPage.vue
+            - CCC-BrowserV4/frontend/src/stores/task.ts
+            - CCC-BrowserV4/frontend/src/api/tasks.ts
+            - CCC-BrowserV4/frontend/src/types/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: ccc_rpa_api
+    ccc_browser_v4/tauri_native:
+        dir_name: Tauri 原生桥接与设备身份管理
+        title: Tauri 原生桥接与设备身份管理
+        scope:
+            - CCC-BrowserV4/src-tauri/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: ccc_browser_v4/frontend_spa/auth
+    ccc_rpa_api:
+        dir_name: CCC RPA 自动化任务执行引擎
+        title: CCC RPA 自动化任务执行引擎
+        scope:
+            - CCC_RPA_API/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: ccc_browser_v4/frontend_spa/auth
+            - path: ccc_browser_v4/frontend_spa/execution
+            - path: ccc_browser_v4/frontend_spa/tasks
+    configuration_system:
+        dir_name: 基于 Pydantic Settings 与 Tauri 的多层配置体系
+        title: 基于 Pydantic Settings 与 Tauri 的多层配置体系
+        scope: []
+        source_files:
+            - CCC-BrowserV4/backend/app/config.py
+            - CCC_RPA_API/app/config.py
+            - CCC-BrowserV4/src-tauri/tauri.conf.json
+            - CCC-BrowserV4/frontend/vite.config.ts
+            - CCC-BrowserV4/backend/.env.example
+            - CCC_RPA_API/.env.example
+        children: []
+        depends_on: []
+        related_to: []
+    dependency_management:
+        dir_name: 多语言混合依赖管理体系
+        title: 多语言混合依赖管理体系
+        scope: []
+        source_files:
+            - CCC-BrowserV4/backend/requirements.txt
+            - CCC_RPA_API/requirements.txt
+            - CCC-BrowserV4/frontend/package.json
+            - CCC-BrowserV4/frontend/package-lock.json
+            - CCC-BrowserV4/src-tauri/Cargo.toml
+            - CCC-BrowserV4/src-tauri/Cargo.lock
+            - CCC-BrowserV4/docker-compose.yml
+        children: []
+        depends_on: []
+        related_to: []
+    error_handling:
+        dir_name: 错误处理与异常传播机制
+        title: 错误处理与异常传播机制
+        scope: []
+        source_files:
+            - CCC_RPA_API/app/api/tasks.py
+            - CCC_RPA_API/app/services/executor.py
+            - CCC_RPA_API/app/main.py
+            - CCC-BrowserV4/frontend/src/api/request.ts
+            - CCC-BrowserV4/frontend/src/stores/execution.ts
+            - CCC_RPA_API/app/browser/site_automation.py
+        children: []
+        depends_on: []
+        related_to: []
+    frontend_style:
+        dir_name: Element Plus 组件库与深色侧边栏布局
+        title: Element Plus 组件库与深色侧边栏布局
+        scope: []
+        source_files:
+            - CCC-BrowserV4/frontend/src/assets/styles/main.css
+            - CCC-BrowserV4/frontend/src/components/layout/AppLayout.vue
+            - CCC-BrowserV4/frontend/src/components/layout/SideMenu.vue
+            - CCC-BrowserV4/frontend/src/pages/LoginPage.vue
+            - CCC-BrowserV4/frontend/package.json
+        children: []
+        depends_on: []
+        related_to: []
+    logging_system:
+        dir_name: Python 标准日志库的分散式使用
+        title: Python 标准日志库的分散式使用
+        scope: []
+        source_files:
+            - CCC_RPA_API/app/browser/human_behavior.py
+            - CCC_RPA_API/app/browser/site_automation.py
+            - CCC_RPA_API/app/services/executor.py
+            - CCC_RPA_API/app/browser/waiter.py
+            - CCC_RPA_API/app/browser/session_manager.py
+        children: []
+        depends_on: []
+        related_to: []

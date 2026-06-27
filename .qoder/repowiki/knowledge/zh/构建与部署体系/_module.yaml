@@ -1,0 +1,14 @@
+schema_version: 1
+module_path: build_system
+title: 构建与部署体系
+scope: []
+source_files:
+    - CCC-BrowserV4/src-tauri/Cargo.toml
+    - CCC-BrowserV4/src-tauri/tauri.conf.json
+    - CCC-BrowserV4/frontend/package.json
+    - CCC-BrowserV4/frontend/vite.config.ts
+    - CCC-BrowserV4/docker-compose.yml
+    - CCC-BrowserV4/backend/requirements.txt
+    - CCC_RPA_API/requirements.txt
+depends_on: []
+related_to: []

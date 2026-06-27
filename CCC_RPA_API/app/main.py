@@ -2,7 +2,7 @@ import asyncio
 from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from app.database import engine, Base
-from app.models import User, Task, TaskExecutionLog  # 确保模型被导入
+from app.models import User, Task, TaskExecutionLog, Tenant, Device  # 确保模型被导入
 from app.api import auth, tasks, tenants, devices
 from app.ws.manager import ws_manager
 
@@ -98,6 +98,35 @@ def startup():
             ]
             db.add_all(mock_tasks)
             db.commit()
+    finally:
+        db.close()
+
+    # 插入租户种子数据
+    db = SessionLocal()
+    try:
+        if db.query(Tenant).count() == 0:
+            seed_tenants = [
+                Tenant(tenant_code="1", name="广东分公司"),
+                Tenant(tenant_code="2", name="浙江分公司"),
+                Tenant(tenant_code="3", name="江苏分公司"),
+            ]
+            db.add_all(seed_tenants)
+            db.commit()
+            print("已插入 3 条租户种子数据")
+    finally:
+        db.close()
+
+    # 插入设备种子数据
+    db = SessionLocal()
+    try:
+        if db.query(Device).count() == 0:
+            seed_devices = [
+                Device(device_code="device-001", name="本地设备-A"),
+                Device(device_code="device-002", name="本地设备-B"),
+            ]
+            db.add_all(seed_devices)
+            db.commit()
+            print("已插入 2 条设备种子数据")
     finally:
         db.close()
 

@@ -1,0 +1,12 @@
+schema_version: 1
+module_path: ccc_browser_v4/frontend_spa/core
+title: 应用核心架构与Tauri桥接
+scope:
+    - CCC-BrowserV4/frontend/src/router/
+    - CCC-BrowserV4/frontend/src/App.vue
+    - CCC-BrowserV4/frontend/src/main.ts
+    - CCC-BrowserV4/frontend/src/utils/
+    - CCC-BrowserV4/frontend/src/assets/styles/
+source_files: []
+depends_on: []
+related_to: []

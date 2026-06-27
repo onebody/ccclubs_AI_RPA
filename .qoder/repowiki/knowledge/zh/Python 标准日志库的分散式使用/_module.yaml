@@ -1,0 +1,12 @@
+schema_version: 1
+module_path: logging_system
+title: Python 标准日志库的分散式使用
+scope: []
+source_files:
+    - CCC_RPA_API/app/browser/human_behavior.py
+    - CCC_RPA_API/app/browser/site_automation.py
+    - CCC_RPA_API/app/services/executor.py
+    - CCC_RPA_API/app/browser/waiter.py
+    - CCC_RPA_API/app/browser/session_manager.py
+depends_on: []
+related_to: []

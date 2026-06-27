@@ -1,0 +1,8 @@
+schema_version: 1
+module_path: ccc_browser_v4/frontend_spa
+title: CCC浏览器V4前端单页应用
+scope:
+    - CCC-BrowserV4/frontend/
+source_files: []
+depends_on: []
+related_to: []

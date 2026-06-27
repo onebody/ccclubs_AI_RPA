@@ -1,0 +1,13 @@
+schema_version: 1
+module_path: configuration_system
+title: 基于 Pydantic Settings 与 Tauri 的多层配置体系
+scope: []
+source_files:
+    - CCC-BrowserV4/backend/app/config.py
+    - CCC_RPA_API/app/config.py
+    - CCC-BrowserV4/src-tauri/tauri.conf.json
+    - CCC-BrowserV4/frontend/vite.config.ts
+    - CCC-BrowserV4/backend/.env.example
+    - CCC_RPA_API/.env.example
+depends_on: []
+related_to: []

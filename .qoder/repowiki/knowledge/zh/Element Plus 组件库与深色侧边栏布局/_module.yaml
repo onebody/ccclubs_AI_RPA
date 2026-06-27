@@ -1,0 +1,12 @@
+schema_version: 1
+module_path: frontend_style
+title: Element Plus 组件库与深色侧边栏布局
+scope: []
+source_files:
+    - CCC-BrowserV4/frontend/src/assets/styles/main.css
+    - CCC-BrowserV4/frontend/src/components/layout/AppLayout.vue
+    - CCC-BrowserV4/frontend/src/components/layout/SideMenu.vue
+    - CCC-BrowserV4/frontend/src/pages/LoginPage.vue
+    - CCC-BrowserV4/frontend/package.json
+depends_on: []
+related_to: []

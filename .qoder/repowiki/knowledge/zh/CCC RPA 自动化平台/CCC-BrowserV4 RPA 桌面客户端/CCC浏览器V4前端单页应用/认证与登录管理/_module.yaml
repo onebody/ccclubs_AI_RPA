@@ -1,0 +1,12 @@
+schema_version: 1
+module_path: ccc_browser_v4/frontend_spa/auth
+title: 认证与登录管理
+scope:
+    - CCC-BrowserV4/frontend/src/pages/LoginPage.vue
+    - CCC-BrowserV4/frontend/src/stores/auth.ts
+    - CCC-BrowserV4/frontend/src/api/auth.ts
+source_files: []
+depends_on: []
+related_to:
+    - path: ccc_browser_v4/tauri_native
+    - path: ccc_rpa_api
