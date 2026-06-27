@@ -3,6 +3,14 @@ import { defineStore } from 'pinia'
 import type { ExecutionStep, CompanyInfo } from '../types/execution'
 import * as executionApi from '../api/execution'
 
+export interface SubTaskProgress {
+  subTaskType: string
+  step: string
+  message: string
+  progress: number
+  data?: Record<string, any>
+}
+
 export const useExecutionStore = defineStore('execution', () => {
   const taskId = ref<number | null>(null)
   const step = ref<ExecutionStep>('idle')
@@ -13,6 +21,10 @@ export const useExecutionStore = defineStore('execution', () => {
 
   const activeTaskId = ref<number | null>(null)  // 当前正在执行的任务ID，null表示无执行中任务
   const isDemo = ref(false)     // 是否为演示模式
+
+  // 子任务进度状态
+  const subTask = ref<SubTaskProgress | null>(null)
+  const subTaskHistory = ref<SubTaskProgress[]>([])
 
   // 判断某任务是否正在执行
   const isExecuting = computed(() => {
@@ -50,6 +62,24 @@ export const useExecutionStore = defineStore('execution', () => {
       case 'execution_error':
         step.value = 'failed'
         message.value = msg.data.message || '执行异常'
+        break
+      case 'sub_task_progress':
+        subTask.value = {
+          subTaskType: msg.data.subTaskType || '',
+          step: msg.data.step || '',
+          message: msg.data.message || '',
+          progress: msg.data.progress || 0,
+          data: msg.data.data,
+        }
+        subTaskHistory.value.push({ ...subTask.value })
+        // 子任务执行中时更新步骤状态
+        if (msg.data.step !== 'done') {
+          step.value = 'executing'
+          message.value = `子任务: ${msg.data.message}`
+        } else {
+          // 子任务完成，清理当前子任务状态但保留历史
+          subTask.value = null
+        }
         break
       case 'task_status_update':
         if (msg.data.status === 'completed') {
@@ -219,10 +249,13 @@ export const useExecutionStore = defineStore('execution', () => {
     companies.value = []
     selectedCompany.value = null
     isDemo.value = false
+    subTask.value = null
+    subTaskHistory.value = []
   }
 
   return {
     taskId, step, message, qrImage, companies, selectedCompany, activeTaskId, isExecuting, isDemo,
+    subTask, subTaskHistory,
     handleWsMessage, doScanComplete, doSelectCompany, doCancel, startExecution, startDemo, clearExecution, reset,
   }
 })

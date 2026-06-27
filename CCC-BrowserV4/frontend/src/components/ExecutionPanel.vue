@@ -82,6 +82,39 @@
       <p v-if="executionStore.step === 'keeping_alive'" class="keeping-alive-detail">
         {{ executionStore.message }}
       </p>
+
+      <!-- 子任务进度面板 -->
+      <div v-if="executionStore.subTask" class="subtask-panel">
+        <div class="subtask-header">
+          <el-tag size="small" type="primary" effect="light">{{ executionStore.subTask.subTaskType }}</el-tag>
+          <span class="subtask-step-label">{{ executionStore.subTask.message }}</span>
+        </div>
+        <el-progress
+          :percentage="executionStore.subTask.progress"
+          :stroke-width="10"
+          striped
+          striped-flow
+          style="width: 100%; margin-top: 6px;"
+        />
+      </div>
+
+      <!-- 子任务完成结果汇总（从历史最后一条 done 记录展示） -->
+      <div
+        v-if="!executionStore.subTask && lastDoneSubTask"
+        class="subtask-result"
+      >
+        <div class="subtask-result-header">
+          <el-tag size="small" type="success" effect="light">{{ lastDoneSubTask.subTaskType }} 完成</el-tag>
+        </div>
+        <div v-if="lastDoneSubTask.data" class="subtask-result-stats">
+          <el-tag size="small" type="success">
+            成功: {{ lastDoneSubTask.data.success_count ?? 0 }}
+          </el-tag>
+          <el-tag size="small" type="danger">
+            失败: {{ lastDoneSubTask.data.fail_count ?? 0 }}
+          </el-tag>
+        </div>
+      </div>
     </div>
 
     <!-- completed -->
@@ -108,9 +141,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, watch, computed } from 'vue'
 import { Loading, OfficeBuilding, Check, SuccessFilled, CircleCloseFilled, WarningFilled } from '@element-plus/icons-vue'
 import { useExecutionStore } from '../stores/execution'
+import type { SubTaskProgress } from '../stores/execution'
 import type { CompanyInfo } from '../types/execution'
 
 defineProps<{ taskId: number }>()
@@ -118,6 +152,15 @@ defineProps<{ taskId: number }>()
 const executionStore = useExecutionStore()
 
 const localSelectedCompany = ref<CompanyInfo | null>(null)
+
+// 从历史中取最后一条 done 状态的子任务，用于展示完成汇总
+const lastDoneSubTask = computed<SubTaskProgress | null>(() => {
+  const history = executionStore.subTaskHistory
+  for (let i = history.length - 1; i >= 0; i--) {
+    if (history[i].step === 'done') return history[i]
+  }
+  return null
+})
 
 // 当进入 waiting_company 步骤时重置本地选择
 watch(() => executionStore.step, (newStep) => {
@@ -300,6 +343,46 @@ watch(() => executionStore.step, (newStep) => {
   font-size: 12px;
   color: #909399;
   text-align: center;
+}
+
+/* Sub-task progress panel */
+.subtask-panel {
+  width: 100%;
+  margin-top: 10px;
+  padding: 10px 12px;
+  background: #fff;
+  border: 1px solid #e4e7ed;
+  border-radius: 6px;
+}
+
+.subtask-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.subtask-step-label {
+  font-size: 12px;
+  color: #606266;
+}
+
+/* Sub-task result summary */
+.subtask-result {
+  width: 100%;
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: #f0f9eb;
+  border: 1px solid #e1f3d8;
+  border-radius: 6px;
+}
+
+.subtask-result-header {
+  margin-bottom: 6px;
+}
+
+.subtask-result-stats {
+  display: flex;
+  gap: 8px;
 }
 
 /* Result states */
