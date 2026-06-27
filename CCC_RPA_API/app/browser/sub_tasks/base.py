@@ -19,13 +19,13 @@ class BaseSubTask:
 
     def _broadcast_progress(self, step: str, message: str, progress: int = 0):
         if self._broadcast and self._task_id:
-            self._broadcast("sub_task_progress", {
+            self._broadcast({"type": "sub_task_progress", "data": {
                 "taskId": self._task_id,
                 "subTaskType": self.__class__.__name__,
                 "step": step,
                 "message": message,
                 "progress": progress,
-            })
+            }})
 
     def _wait_human(self, min_s: float = 3.0, max_s: float = 10.0):
         """模拟人类思考时间，PPM 控制"""

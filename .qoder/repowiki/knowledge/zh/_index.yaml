@@ -3,7 +3,7 @@ schema_version: 1
 locale: zh-CN
 branch: master
 nodes_managed: true
-exported_at: "2026-06-27T16:25:26Z"
+exported_at: "2026-06-27T17:00:57Z"
 modules:
     "":
         dir_name: CCC RPA 自动化平台
@@ -33,8 +33,8 @@ modules:
         depends_on: []
         related_to: []
     ccc_browser_v4:
-        dir_name: CCC-BrowserV4 RPA 桌面客户端
-        title: CCC-BrowserV4 RPA 桌面客户端
+        dir_name: CCC-BrowserV4 RPA 桌面应用编排
+        title: CCC-BrowserV4 RPA 桌面应用编排
         scope:
             - CCC-BrowserV4/
         source_files: []
@@ -54,8 +54,8 @@ modules:
         depends_on: []
         related_to: []
     ccc_browser_v4/frontend_spa:
-        dir_name: CCC浏览器V4前端单页应用
-        title: CCC浏览器V4前端单页应用
+        dir_name: RPA桌面端前端应用
+        title: RPA桌面端前端应用
         scope:
             - CCC-BrowserV4/frontend/
         source_files: []
@@ -95,8 +95,8 @@ modules:
         related_to:
             - path: ccc_browser_v4/tauri_native
     ccc_browser_v4/frontend_spa/execution:
-        dir_name: 任务执行状态管理与交互
-        title: 任务执行状态管理与交互
+        dir_name: RPA任务执行与状态管理
+        title: RPA任务执行与状态管理
         scope:
             - CCC-BrowserV4/frontend/src/components/ExecutionPanel.vue
             - CCC-BrowserV4/frontend/src/stores/execution.ts
@@ -143,8 +143,8 @@ modules:
             - path: ccc_browser_v4/frontend_spa/auth
             - path: ccc_browser_v4/frontend_spa/core
     ccc_rpa_api:
-        dir_name: 多租户 RPA 自动化后端
-        title: 多租户 RPA 自动化后端
+        dir_name: 多租户 RPA 自动化服务
+        title: 多租户 RPA 自动化服务
         scope:
             - CCC_RPA_API/
         source_files: []

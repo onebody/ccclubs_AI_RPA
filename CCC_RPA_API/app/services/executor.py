@@ -20,17 +20,30 @@ _executor = ThreadPoolExecutor(max_workers=3, thread_name_prefix="task-exec")
 _wait_executor = ThreadPoolExecutor(max_workers=3, thread_name_prefix="wait-block")
 
 
-def _broadcast(msg_type: str, data: dict):
-    """在工作线程中安全地广播 WebSocket 消息，使用主事件循环"""
-    message = {"type": msg_type, "data": data}
+def _broadcast_done(future):
+    """广播完成回调，检查并记录异常"""
+    try:
+        exc = future.exception(timeout=0)
+        if exc:
+            logger.error(f"广播协程异常: {exc}")
+    except Exception as e:
+        logger.error(f"广播结果检查失败: {e}")
+
+
+def _broadcast(message: dict):
+    """线程安全的 WebSocket 广播"""
     try:
         from app.main import _main_loop
         if _main_loop and _main_loop.is_running():
-            asyncio.run_coroutine_threadsafe(ws_manager.broadcast(message), _main_loop)
+            future = asyncio.run_coroutine_threadsafe(
+                ws_manager.broadcast(message), _main_loop
+            )
+            # 添加回调检查异常，不阻塞工作线程
+            future.add_done_callback(_broadcast_done)
         else:
-            logger.warning(f"主事件循环不可用，无法广播消息: {msg_type}")
+            logger.warning(f"主事件循环不可用，无法广播消息: {message.get('type')}")
     except Exception as e:
-        logger.error(f"广播消息失败: {msg_type}, 错误: {e}")
+        logger.error(f"广播调度失败: {e}")
 
 
 def _pw(fn):
@@ -55,10 +68,10 @@ def _recover_checkpoint(province: str, context, page, task_id: int, step: str):
             logger.warning(f"[recover] 页面状态检查失败: {e}")
         return context, page
     logger.warning("浏览器已关闭，尝试恢复...")
-    _broadcast("execution_progress", {
+    _broadcast({"type": "execution_progress", "data": {
         "taskId": task_id, "step": step,
         "message": "浏览器异常，正在恢复...",
-    })
+    }})
     BrowserSessionManager.recover(province)
     context = BrowserSessionManager.get_context(province)
     page = _pw(lambda: context.new_page())
@@ -98,25 +111,25 @@ def _run_task_logic(task_id: int):
         sub_tasks = json.loads(task.sub_tasks) if task.sub_tasks else []
 
         # 1. 获取浏览器上下文（PW 线程）
-        _broadcast("execution_progress", {
+        _broadcast({"type": "execution_progress", "data": {
             "taskId": task_id, "step": "checking_login",
             "message": "正在初始化浏览器...",
-        })
+        }})
         context = BrowserSessionManager.get_context(province)
 
         # 2. 检查登录状态（PW 线程）
-        _broadcast("execution_progress", {
+        _broadcast({"type": "execution_progress", "data": {
             "taskId": task_id, "step": "checking_login",
             "message": "正在检查登录状态...",
-        })
+        }})
         is_logged_in = _pw(lambda: SiteAutomation.check_login_status(context, province))
 
         # 3. 若未登录，执行扫码登录
         if not is_logged_in:
-            _broadcast("execution_progress", {
+            _broadcast({"type": "execution_progress", "data": {
                 "taskId": task_id, "step": "qr_scanning",
                 "message": "正在打开登录页面...",
-            })
+            }})
             page = _pw(lambda: SiteAutomation.navigate_to_unit_login(context, province))
 
             # 截取二维码（PW 线程）
@@ -124,11 +137,11 @@ def _run_task_logic(task_id: int):
             qr_image = _pw(lambda: SiteAutomation.capture_qr_code(page))
 
             # 推送二维码到前端
-            _broadcast("qr_code", {"taskId": task_id, "qrImage": qr_image})
-            _broadcast("execution_progress", {
+            _broadcast({"type": "qr_code", "data": {"taskId": task_id, "qrImage": qr_image}})
+            _broadcast({"type": "execution_progress", "data": {
                 "taskId": task_id, "step": "qr_scanning",
                 "message": "请使用交管12123 APP扫描二维码",
-            })
+            }})
 
             # 等待用户扫码（在独立线程中阻塞，不占用 PW 线程）
             try:
@@ -140,9 +153,9 @@ def _run_task_logic(task_id: int):
 
             # 保存登录状态（PW 线程）
             BrowserSessionManager.save_state(province)
-            _broadcast("login_result", {
+            _broadcast({"type": "login_result", "data": {
                 "taskId": task_id, "success": True, "message": "登录成功",
-            })
+            }})
         else:
             page = _pw(lambda: context.new_page())
             _pw(lambda: page.goto(
@@ -151,24 +164,24 @@ def _run_task_logic(task_id: int):
             ))
 
         # 4. 抓取单位列表（PW 线程）
-        _broadcast("execution_progress", {
+        _broadcast({"type": "execution_progress", "data": {
             "taskId": task_id, "step": "waiting_company",
             "message": "正在获取单位列表...",
-        })
+        }})
         try:
             companies = _pw(lambda: SiteAutomation.scrape_company_list(page))
         except Exception as e:
             error_msg = f"抓取单位列表失败: {str(e)}"
             logger.error(error_msg)
-            _broadcast("execution_error", {"taskId": task_id, "message": error_msg})
+            _broadcast({"type": "execution_error", "data": {"taskId": task_id, "message": error_msg}})
             raise
 
         # 推送单位列表
-        _broadcast("company_list", {"taskId": task_id, "companies": companies})
-        _broadcast("execution_progress", {
+        _broadcast({"type": "company_list", "data": {"taskId": task_id, "companies": companies}})
+        _broadcast({"type": "execution_progress", "data": {
             "taskId": task_id, "step": "waiting_company",
             "message": "请选择要办理业务的单位",
-        })
+        }})
 
         # 等待用户选择单位（在独立线程中阻塞）
         try:
@@ -181,14 +194,14 @@ def _run_task_logic(task_id: int):
             raise Exception("选择单位等待超时")
 
         # 5. 选择单位（PW 线程）
-        _broadcast("execution_progress", {
+        _broadcast({"type": "execution_progress", "data": {
             "taskId": task_id, "step": "executing",
             "message": "正在登录单位账户...",
-        })
-        _broadcast("execution_progress", {
+        }})
+        _broadcast({"type": "execution_progress", "data": {
             "taskId": task_id, "step": "executing",
             "message": "正在切换到目标单位...",
-        })
+        }})
         context, page = _recover_checkpoint(province, context, page, task_id, "executing")
         success = _pw(lambda: SiteAutomation.select_company(page, company_id, company_name))
         if not success:
@@ -197,10 +210,10 @@ def _run_task_logic(task_id: int):
         # 6. 进入保活循环
         # 为保活循环注册可取消的信号事件
         ExecutionWaiter.register_check(task_id)
-        _broadcast("execution_progress", {
+        _broadcast({"type": "execution_progress", "data": {
             "taskId": task_id, "step": "keeping_alive",
             "message": "页面保活中，等待业务触发...",
-        })
+        }})
 
         max_keep_alive_hours = 8  # 最大保活时长（小时）
         keep_alive_start = time.time()
@@ -253,10 +266,10 @@ def _run_task_logic(task_id: int):
                     if biz_type in business_executed:
                         continue
 
-                    _broadcast("execution_progress", {
+                    _broadcast({"type": "execution_progress", "data": {
                         "taskId": task_id, "step": "executing",
                         "message": f"检测到待处理业务: {biz_type}，正在处理...",
-                    })
+                    }})
                     result = _pw(
                         lambda bt=biz_type: SiteAutomation.execute_sub_task(
                             page, bt, context
@@ -275,10 +288,10 @@ def _run_task_logic(task_id: int):
                             f"{result.get('message')}"
                         )
 
-                    _broadcast("execution_progress", {
+                    _broadcast({"type": "execution_progress", "data": {
                         "taskId": task_id, "step": "keeping_alive",
                         "message": f"业务 {biz_type} 处理完成，继续保活...",
-                    })
+                    }})
 
                     # 子任务执行后冷却间隔，控制 PPM
                     cooldown = random.uniform(30, 90)
@@ -317,11 +330,11 @@ def _run_task_logic(task_id: int):
         log.result_message = f"执行成功，处理业务: {', '.join(business_executed) if business_executed else '无'}"
         db.commit()
 
-        _broadcast("task_status_update", {
+        _broadcast({"type": "task_status_update", "data": {
             "taskId": task_id, "status": "completed",
             "lastResult": "success",
             "lastExecutedAt": finished_at.strftime("%Y-%m-%d %H:%M:%S"),
-        })
+        }})
 
     except Exception as e:
         logger.error(f"任务执行异常: {e}", exc_info=True)
@@ -343,12 +356,12 @@ def _run_task_logic(task_id: int):
         except Exception:
             pass
 
-        _broadcast("execution_error", {"taskId": task_id, "message": str(e)})
-        _broadcast("task_status_update", {
+        _broadcast({"type": "execution_error", "data": {"taskId": task_id, "message": str(e)}})
+        _broadcast({"type": "task_status_update", "data": {
             "taskId": task_id, "status": "failed",
             "lastResult": "failed",
             "lastExecutedAt": finished_at.strftime("%Y-%m-%d %H:%M:%S"),
-        })
+        }})
     finally:
         ExecutionWaiter.cleanup(task_id)
         db.close()

@@ -1,8 +1,0 @@
-schema_version: 1
-module_path: ccc_browser_v4/backend_api
-title: CCC-BrowserV4 后端 API 基础架构
-scope:
-    - CCC-BrowserV4/backend/
-source_files: []
-depends_on: []
-related_to: []
