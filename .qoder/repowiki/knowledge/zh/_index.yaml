@@ -3,7 +3,7 @@ schema_version: 1
 locale: zh-CN
 branch: master
 nodes_managed: true
-exported_at: "2026-06-26T17:53:45Z"
+exported_at: "2026-06-27T16:25:26Z"
 modules:
     "":
         dir_name: CCC RPA 自动化平台
@@ -92,7 +92,8 @@ modules:
         source_files: []
         children: []
         depends_on: []
-        related_to: []
+        related_to:
+            - path: ccc_browser_v4/tauri_native
     ccc_browser_v4/frontend_spa/execution:
         dir_name: 任务执行状态管理与交互
         title: 任务执行状态管理与交互
@@ -140,9 +141,10 @@ modules:
         depends_on: []
         related_to:
             - path: ccc_browser_v4/frontend_spa/auth
+            - path: ccc_browser_v4/frontend_spa/core
     ccc_rpa_api:
-        dir_name: CCC RPA 自动化任务执行引擎
-        title: CCC RPA 自动化任务执行引擎
+        dir_name: 多租户 RPA 自动化后端
+        title: 多租户 RPA 自动化后端
         scope:
             - CCC_RPA_API/
         source_files: []

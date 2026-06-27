@@ -9,4 +9,5 @@ scope:
     - CCC-BrowserV4/frontend/src/assets/styles/
 source_files: []
 depends_on: []
-related_to: []
+related_to:
+    - path: ccc_browser_v4/tauri_native

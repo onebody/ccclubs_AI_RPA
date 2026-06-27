@@ -736,7 +736,15 @@ class SiteAutomation:
 
     @staticmethod
     def execute_sub_task(page, sub_task: str, context: dict) -> dict:
-        """执行单个子任务（占位）"""
-        logger.info(f"执行子任务: {sub_task}")
-        time.sleep(2)  # 占位，后续替换为实际自动化
-        return {"success": True, "message": f"{sub_task} 执行完成"}
+        """执行子任务，委托给 SubTaskRegistry"""
+        from app.browser.sub_tasks import SubTaskRegistry
+
+        handler_cls = SubTaskRegistry.get_handler(sub_task)
+        if not handler_cls:
+            logger.warning(f"[execute_sub_task] 未知子任务类型: {sub_task}")
+            return {"success": False, "message": f"未知子任务: {sub_task}"}
+
+        broadcast_fn = context.get("broadcast_fn")
+        task_id = context.get("task_id")
+        handler = handler_cls(page, broadcast_fn=broadcast_fn, task_id=task_id)
+        return handler.execute()

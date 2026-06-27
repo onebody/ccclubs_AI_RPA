@@ -7,3 +7,4 @@ source_files: []
 depends_on: []
 related_to:
     - path: ccc_browser_v4/frontend_spa/auth
+    - path: ccc_browser_v4/frontend_spa/core

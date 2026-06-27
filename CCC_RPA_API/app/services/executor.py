@@ -2,6 +2,7 @@ import threading
 import json
 import time
 import asyncio
+import random
 import logging
 from datetime import datetime, timedelta
 from concurrent.futures import ThreadPoolExecutor
@@ -231,20 +232,59 @@ def _run_task_logic(task_id: int):
             pending = _pw(lambda: SiteAutomation.check_pending_business(page))
 
             if pending:
+                # 构建 context，传递 broadcast_fn 和 task_id 给子任务
+                context = {
+                    "broadcast_fn": _broadcast,
+                    "task_id": task_id,
+                    "sub_tasks": sub_tasks,
+                }
                 for biz in pending:
                     biz_type = biz.get("type", "")
-                    if biz_type not in business_executed:
-                        _broadcast("execution_progress", {
-                            "taskId": task_id, "step": "executing",
-                            "message": f"检测到待处理业务: {biz_type}，正在处理...",
-                        })
-                        result = _pw(lambda bt=biz_type: SiteAutomation.execute_sub_task(page, bt, {}))
-                        logger.info(f"业务 {biz_type} 结果: {result}")
-                        business_executed.append(biz_type)
-                        _broadcast("execution_progress", {
-                            "taskId": task_id, "step": "keeping_alive",
-                            "message": f"业务 {biz_type} 处理完成，继续保活...",
-                        })
+
+                    # 用用户配置的 sub_tasks 过滤（如果用户配置了的话）
+                    if sub_tasks and biz_type not in sub_tasks:
+                        matched = any(
+                            st in biz_type or biz_type in st for st in sub_tasks
+                        )
+                        if not matched:
+                            logger.info(f"[executor] 跳过未配置的子任务: {biz_type}")
+                            continue
+
+                    if biz_type in business_executed:
+                        continue
+
+                    _broadcast("execution_progress", {
+                        "taskId": task_id, "step": "executing",
+                        "message": f"检测到待处理业务: {biz_type}，正在处理...",
+                    })
+                    result = _pw(
+                        lambda bt=biz_type: SiteAutomation.execute_sub_task(
+                            page, bt, context
+                        )
+                    )
+                    business_executed.append(biz_type)
+
+                    if result and result.get("success"):
+                        logger.info(
+                            f"[executor] 子任务 {biz_type} 执行成功: "
+                            f"{result.get('message')}"
+                        )
+                    else:
+                        logger.warning(
+                            f"[executor] 子任务 {biz_type} 执行失败: "
+                            f"{result.get('message')}"
+                        )
+
+                    _broadcast("execution_progress", {
+                        "taskId": task_id, "step": "keeping_alive",
+                        "message": f"业务 {biz_type} 处理完成，继续保活...",
+                    })
+
+                    # 子任务执行后冷却间隔，控制 PPM
+                    cooldown = random.uniform(30, 90)
+                    logger.info(f"[executor] 子任务后冷却 {cooldown:.0f}s")
+                    time.sleep(cooldown)
+
                 # 处理完业务后不跳转回首页，停留在当前业务页面继续保活
                 logger.info("业务处理完成，停留在当前业务页面继续保活")
             else:
