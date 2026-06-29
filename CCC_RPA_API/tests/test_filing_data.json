@@ -1,0 +1,35 @@
+{
+    "test_case_1": {
+        "description": "标准合同备案 - 单条",
+        "context": {
+            "sub_tasks": ["合同备案"],
+            "tenant_id": "1",
+            "province": "浙江"
+        },
+        "expected_flow": [
+            "navigating - 导航到合同备案页面",
+            "fetching_list - 获取待备案合同列表",
+            "processing - 逐条处理备案",
+            "filling_form - 填写备案表单",
+            "submitting - 提交备案",
+            "verifying - 验证结果",
+            "done - 完成汇总"
+        ]
+    },
+    "test_case_2": {
+        "description": "合同备案 - 多条翻页",
+        "context": {
+            "sub_tasks": ["合同备案"],
+            "tenant_id": "2",
+            "province": "浙江"
+        }
+    },
+    "test_case_3": {
+        "description": "合同备案 - 部分失败场景",
+        "context": {
+            "sub_tasks": ["合同备案"],
+            "tenant_id": "3",
+            "province": "广东"
+        }
+    }
+}
