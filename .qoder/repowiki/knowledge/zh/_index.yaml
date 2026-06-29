@@ -3,7 +3,7 @@ schema_version: 1
 locale: zh-CN
 branch: master
 nodes_managed: true
-exported_at: "2026-06-27T18:58:17Z"
+exported_at: "2026-06-29T03:57:02Z"
 modules:
     "":
         dir_name: CCC RPA 自动化平台
@@ -143,8 +143,8 @@ modules:
             - path: ccc_browser_v4/frontend_spa/auth
             - path: ccc_browser_v4/frontend_spa/core
     ccc_rpa_api:
-        dir_name: 多租户 RPA 自动化服务
-        title: 多租户 RPA 自动化服务
+        dir_name: CCC RPA 自动化执行引擎
+        title: CCC RPA 自动化执行引擎
         scope:
             - CCC_RPA_API/
         source_files: []

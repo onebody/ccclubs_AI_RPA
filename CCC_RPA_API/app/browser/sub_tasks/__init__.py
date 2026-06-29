@@ -4,6 +4,7 @@ from app.browser.sub_tasks.contract_entry import ContractEntrySubTask
 from app.browser.sub_tasks.violation_query import ViolationQuerySubTask
 from app.browser.sub_tasks.contract_adjust import ContractAdjustSubTask
 from app.browser.sub_tasks.violation_transfer import ViolationTransferSubTask
+from app.browser.sub_tasks.violation_sync import ViolationSyncSubTask
 import logging
 
 logger = logging.getLogger(__name__)
@@ -20,6 +21,8 @@ class SubTaskRegistry:
         "合同调整": ContractAdjustSubTask,
         "违章转移": ViolationTransferSubTask,
         "转移违章": ViolationTransferSubTask,
+        "违章同步": ViolationSyncSubTask,
+        "数据同步": ViolationSyncSubTask,
     }
 
     @classmethod

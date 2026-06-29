@@ -89,6 +89,7 @@
             <el-checkbox label="合同备案">合同备案</el-checkbox>
             <el-checkbox label="合同录入">合同录入</el-checkbox>
             <el-checkbox label="违章查询">违章查询</el-checkbox>
+            <el-checkbox label="违章同步">违章同步</el-checkbox>
             <el-checkbox label="合同调整">合同调整</el-checkbox>
             <el-checkbox label="违章转移">违章转移</el-checkbox>
           </el-checkbox-group>
