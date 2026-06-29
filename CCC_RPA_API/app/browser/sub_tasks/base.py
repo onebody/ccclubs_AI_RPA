@@ -8,10 +8,11 @@ logger = logging.getLogger(__name__)
 class BaseSubTask:
     """子任务基类 — 所有子任务继承此类"""
 
-    def __init__(self, page, broadcast_fn=None, task_id=None):
+    def __init__(self, page, broadcast_fn=None, task_id=None, context=None):
         self.page = page
         self._broadcast = broadcast_fn
         self._task_id = task_id
+        self._context = context or {}
 
     def execute(self) -> dict:
         """子类必须实现"""

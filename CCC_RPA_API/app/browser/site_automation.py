@@ -746,5 +746,5 @@ class SiteAutomation:
 
         broadcast_fn = context.get("broadcast_fn")
         task_id = context.get("task_id")
-        handler = handler_cls(page, broadcast_fn=broadcast_fn, task_id=task_id)
+        handler = handler_cls(page, broadcast_fn=broadcast_fn, task_id=task_id, context=context)
         return handler.execute()

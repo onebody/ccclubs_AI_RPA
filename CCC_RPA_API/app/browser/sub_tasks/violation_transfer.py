@@ -12,8 +12,8 @@ class ViolationTransferSubTask(BaseSubTask):
     SUB_TASK_TYPE = "ViolationTransferSubTask"
 
     def __init__(self, page, broadcast_fn=None, task_id=None,
-                 sub_task_id=None, sub_task_type=None):
-        super().__init__(page, broadcast_fn=broadcast_fn, task_id=task_id)
+                 sub_task_id=None, sub_task_type=None, context=None):
+        super().__init__(page, broadcast_fn=broadcast_fn, task_id=task_id, context=context)
         self._sub_task_id = sub_task_id
         self._sub_task_type = sub_task_type
 
