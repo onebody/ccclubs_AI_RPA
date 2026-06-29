@@ -5,6 +5,7 @@ from app.browser.sub_tasks.violation_query import ViolationQuerySubTask
 from app.browser.sub_tasks.contract_adjust import ContractAdjustSubTask
 from app.browser.sub_tasks.violation_transfer import ViolationTransferSubTask
 from app.browser.sub_tasks.violation_sync import ViolationSyncSubTask
+from app.browser.sub_tasks.filing_cancellation import FilingCancellationSubTask
 import logging
 
 logger = logging.getLogger(__name__)
@@ -23,6 +24,8 @@ class SubTaskRegistry:
         "转移违章": ViolationTransferSubTask,
         "违章同步": ViolationSyncSubTask,
         "数据同步": ViolationSyncSubTask,
+        "备案作废": FilingCancellationSubTask,
+        "合同备案作废": FilingCancellationSubTask,
     }
 
     @classmethod
